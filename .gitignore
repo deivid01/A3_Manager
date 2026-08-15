@@ -1,0 +1,14 @@
+node_modules/
+dist/
+release/
+coverage/
+.vite/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+*.env
+*.local
+npm-debug.log*
+Thumbs.db
+Desktop.ini

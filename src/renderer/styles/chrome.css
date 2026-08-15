@@ -1,0 +1,143 @@
+.modal-backdrop {
+  align-items: center;
+  background: rgba(10, 10, 10, 0.45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 20;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.25);
+  display: grid;
+  gap: 14px;
+  max-width: 560px;
+  padding: 18px;
+  width: min(560px, 100%);
+}
+
+.modal header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.modal-search {
+  width: 100%;
+}
+
+.search-results {
+  display: grid;
+  gap: 8px;
+}
+
+.search-results button {
+  background: #f8f9f7;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  text-align: left;
+}
+
+.search-results span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.login-screen {
+  align-items: center;
+  background: #181818;
+  display: flex;
+  height: 100%;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-panel {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+  display: grid;
+  gap: 14px;
+  max-width: 410px;
+  padding: 28px;
+  width: 100%;
+}
+
+.login-panel img {
+  height: 82px;
+  object-fit: contain;
+  width: 150px;
+}
+
+.password-field {
+  position: relative;
+}
+
+.icon-button.inside {
+  bottom: 0;
+  position: absolute;
+  right: 0;
+}
+
+.app-footer {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  justify-content: space-between;
+  padding: 8px 24px;
+}
+
+.app-footer button,
+.login-panel footer button {
+  background: transparent;
+  border: 0;
+  color: var(--brand-dark);
+  font-weight: 700;
+  padding: 0;
+}
+
+.login-panel footer {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+@media (max-width: 1120px) {
+  .app-shell {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+
+  .brand div,
+  .nav-button span,
+  .sidebar-footer div {
+    display: none;
+  }
+
+  .brand img {
+    width: 52px;
+  }
+
+  .split-layout,
+  .launch-grid,
+  .report-grid,
+  .filters {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}
