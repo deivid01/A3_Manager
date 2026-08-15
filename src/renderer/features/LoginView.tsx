@@ -35,7 +35,7 @@ export function LoginView({
   return (
     <main className="login-screen">
       <section className="login-panel">
-        <img src="/logo-A3.jpg" alt="A3 Manager" />
+        <img src={`${import.meta.env.BASE_URL}logo-A3.jpg`} alt="A3 Manager" />
         <h1>A3 Manager</h1>
         <p>Gestão local de locações e equipamentos</p>
         <form onSubmit={submit}>
@@ -68,7 +68,7 @@ export function LoginView({
           </button>
         </form>
         <footer>
-          <span>Versão {appInfo.version}</span>
+          <span>{appInfo.version ? `Versão ${appInfo.version}` : "Versão carregando"}</span>
           <button type="button" onClick={() => window.a3.openExternal(appInfo.developerUrl)}>
             Feito por Deivid Peres
           </button>

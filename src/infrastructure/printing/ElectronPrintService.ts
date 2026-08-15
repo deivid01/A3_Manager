@@ -1,11 +1,12 @@
 import fs from "node:fs";
+import path from "node:path";
 import { BrowserWindow, dialog } from "electron";
+import { AppError } from "../../domain/appError";
 import type { RentalDetail } from "../../domain/types";
 import { renderRentalDocumentHtml } from "./rentalDocument";
 
 export class ElectronPrintService {
   async savePdf(rental: RentalDetail): Promise<string | null> {
-    const pdf = await this.renderPdf(rental);
     const result = await dialog.showSaveDialog({
       title: "Salvar contrato de locação",
       defaultPath: `${sanitizeFileName(rental.code)}.pdf`,
@@ -16,8 +17,18 @@ export class ElectronPrintService {
       return null;
     }
 
-    fs.writeFileSync(result.filePath, pdf);
-    return result.filePath;
+    return this.savePdfToPath(rental, result.filePath);
+  }
+
+  async savePdfToPath(rental: RentalDetail, filePath: string): Promise<string> {
+    try {
+      const pdf = await this.renderPdf(rental);
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, pdf);
+      return filePath;
+    } catch {
+      throw new AppError("PDF_ERROR", "Não foi possível gerar o PDF da locação.");
+    }
   }
 
   async print(rental: RentalDetail): Promise<void> {
@@ -28,7 +39,7 @@ export class ElectronPrintService {
           if (success) {
             resolve();
           } else {
-            reject(new Error(failureReason || "Não foi possível enviar o documento para impressão."));
+            reject(new AppError("PDF_ERROR", failureReason || "Não foi possível enviar o documento para impressão."));
           }
         });
       });

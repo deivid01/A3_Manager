@@ -91,6 +91,7 @@ export function mapRental(row: DbRow): Rental {
     receiverCpf: asText(row.receiver_cpf),
     paymentMethod: asText(row.payment_method) as Rental["paymentMethod"],
     installments: row.installments == null ? null : asNumber(row.installments),
+    clientRequestId: nullableText(row.client_request_id),
     customerSnapshot: JSON.parse(asText(row.customer_snapshot_json)) as Rental["customerSnapshot"],
     companySnapshot: JSON.parse(asText(row.company_snapshot_json)) as Rental["companySnapshot"],
     launchedByUsername: asText(row.launched_by_username),

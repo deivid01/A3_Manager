@@ -103,7 +103,8 @@ export const rentalLaunchSchema = z
     receiverName: optionalText,
     receiverCpf: z.string().trim().default(""),
     paymentMethod: z.enum(PAYMENT_METHODS),
-    installments: z.number().int().positive().nullable()
+    installments: z.number().int().positive().nullable(),
+    clientRequestId: z.string().uuid().optional()
   })
   .superRefine((value, ctx) => {
     if (!value.receiverIsCustomer) {

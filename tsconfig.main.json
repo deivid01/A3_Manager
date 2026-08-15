@@ -16,6 +16,7 @@
   },
   "include": [
     "src/main",
+    "src/tools",
     "src/preload",
     "src/shared",
     "src/domain",

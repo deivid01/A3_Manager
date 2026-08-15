@@ -2,6 +2,8 @@ node_modules/
 dist/
 release/
 coverage/
+tmp/
+output/
 .vite/
 *.log
 *.sqlite

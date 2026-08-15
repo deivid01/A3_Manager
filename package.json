@@ -1,6 +1,6 @@
 {
   "name": "a3-manager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Aplicativo desktop offline para gestão de locações da A3 Locação de Equipamentos para Construção.",
   "main": "dist/main/index.js",
   "author": "Deivid Peres",
@@ -62,10 +62,15 @@
       {
         "from": "node_modules/sql.js/dist/sql-wasm.wasm",
         "to": "sql-wasm.wasm"
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
       }
     ],
     "asar": true,
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -87,6 +92,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
       "shortcutName": "A3 Manager",
       "runAfterFinish": false
     },

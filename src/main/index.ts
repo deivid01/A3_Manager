@@ -1,9 +1,11 @@
 import path from "node:path";
+import fs from "node:fs";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { ApplicationService } from "../application/ApplicationService";
 import { AppError, toSafeError } from "../domain/appError";
 import type { User } from "../domain/types";
 import { SqlJsDatabase, resolveDatabasePath } from "../infrastructure/database/SqlJsDatabase";
+import { FileLogger } from "../infrastructure/logging/FileLogger";
 import { ElectronPrintService } from "../infrastructure/printing/ElectronPrintService";
 import type {
   CompanyInput,
@@ -21,21 +23,31 @@ let mainWindow: BrowserWindow | null = null;
 let service: ApplicationService;
 let printService: ElectronPrintService;
 let currentUser: User | null = null;
+let logger: FileLogger | null = null;
 
-void app.whenReady().then(async () => {
-  const database = await SqlJsDatabase.open(resolveDatabasePath(app.getPath("userData")));
-  service = new ApplicationService(database);
-  printService = new ElectronPrintService();
-  await service.initialize();
-  registerIpcHandlers();
-  await createMainWindow();
+void app
+  .whenReady()
+  .then(async () => {
+    logger = FileLogger.open(app.getPath("userData"));
+    logger.info("app_start", { version: app.getVersion() });
+    const database = await SqlJsDatabase.open(resolveDatabasePath(app.getPath("userData")));
+    service = new ApplicationService(database);
+    printService = new ElectronPrintService();
+    await service.initialize();
+    registerIpcHandlers();
+    await createMainWindow();
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      void createMainWindow();
-    }
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        void createMainWindow();
+      }
+    });
+  })
+  .catch((error) => {
+    logger?.error("startup_failed", error);
+    console.error(error);
+    app.quit();
   });
-});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
@@ -50,6 +62,7 @@ async function createMainWindow(): Promise<void> {
     minWidth: 1024,
     minHeight: 680,
     title: appDisplayName,
+    icon: resolveWindowIconPath(),
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
@@ -66,6 +79,12 @@ async function createMainWindow(): Promise<void> {
     return { action: "deny" };
   });
 
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!isAllowedNavigation(url)) {
+      event.preventDefault();
+    }
+  });
+
   mainWindow.once("ready-to-show", () => mainWindow?.show());
 
   const devServerUrl = process.env.VITE_DEV_SERVER_URL;
@@ -74,6 +93,23 @@ async function createMainWindow(): Promise<void> {
   } else {
     await mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   }
+}
+
+function resolveWindowIconPath(): string | undefined {
+  const electronProcess = process as NodeJS.Process & { resourcesPath?: string };
+  const candidates = [
+    electronProcess.resourcesPath ? path.join(electronProcess.resourcesPath, "icon.ico") : "",
+    path.join(process.cwd(), "build", "icon.ico")
+  ].filter(Boolean);
+  return candidates.find((candidate) => fs.existsSync(candidate));
+}
+
+function isAllowedNavigation(url: string): boolean {
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devServerUrl && url.startsWith(devServerUrl)) {
+    return true;
+  }
+  return url.startsWith("file://");
 }
 
 function registerIpcHandlers(): void {
@@ -182,6 +218,7 @@ function handle(channel: string, action: (...args: unknown[]) => unknown): void 
       return { ok: true, data };
     } catch (error) {
       const safeError = toSafeError(error);
+      logger?.error("ipc_failed", error, { channel, code: safeError.code });
       console.error(`[${safeError.code}] ${safeError.message}`);
       return { ok: false, error: safeError };
     }

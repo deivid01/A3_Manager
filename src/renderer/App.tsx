@@ -35,7 +35,7 @@ export function App() {
   const [activeView, setActiveView] = useState<ViewKey>("rentals");
   const [appInfo, setAppInfo] = useState<AppInfo>({
     name: "A3 Manager",
-    version: "0.1.0",
+    version: "",
     developerUrl: "https://github.com/deivid01"
   });
 
@@ -53,10 +53,10 @@ export function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <img src="/logo-A3.jpg" alt="A3 Manager" />
+          <img src={`${import.meta.env.BASE_URL}logo-A3.jpg`} alt="A3 Manager" />
           <div>
             <strong>A3 Manager</strong>
-            <span>v{appInfo.version}</span>
+            <span>{appInfo.version ? `v${appInfo.version}` : "Versão carregando"}</span>
           </div>
         </div>
         <nav aria-label="Navegação principal">

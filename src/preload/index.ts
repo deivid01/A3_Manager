@@ -1,6 +1,31 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { A3Api } from "../shared/contracts";
-import { ipcChannels } from "../shared/ipc";
+
+const ipcChannels = {
+  appInfo: "app:info",
+  openExternal: "app:open-external",
+  login: "auth:login",
+  listUsers: "users:list",
+  createUser: "users:create",
+  getCompany: "company:get",
+  saveCompany: "company:save",
+  listCustomers: "customers:list",
+  searchCustomers: "customers:search",
+  createCustomer: "customers:create",
+  updateCustomer: "customers:update",
+  archiveCustomer: "customers:archive",
+  listEquipment: "equipment:list",
+  searchEquipment: "equipment:search",
+  createEquipment: "equipment:create",
+  updateEquipment: "equipment:update",
+  archiveEquipment: "equipment:archive",
+  launchRental: "rentals:launch",
+  listRentals: "rentals:list",
+  getRental: "rentals:get",
+  finalizeRental: "rentals:finalize",
+  saveRentalPdf: "rentals:save-pdf",
+  printRental: "rentals:print"
+} as const;
 
 type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
 
@@ -9,6 +34,7 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   if (!result.ok) {
     const error = new Error(result.error.message);
     error.name = result.error.code;
+    (error as Error & { code?: string }).code = result.error.code;
     throw error;
   }
   return result.data;

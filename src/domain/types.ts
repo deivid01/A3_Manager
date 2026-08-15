@@ -138,6 +138,7 @@ export interface Rental {
   receiverCpf: string;
   paymentMethod: PaymentMethod;
   installments: number | null;
+  clientRequestId: string | null;
   customerSnapshot: Customer;
   companySnapshot: CompanySettings;
   launchedByUsername: string;

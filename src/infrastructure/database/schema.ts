@@ -140,5 +140,15 @@ export const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_rentals_customer_name_snapshot ON rentals(customer_name_snapshot_normalized);
       CREATE INDEX IF NOT EXISTS idx_rental_items_rental_id ON rental_items(rental_id);
     `
+  },
+  {
+    id: 2,
+    name: "rental_launch_idempotency",
+    sql: `
+      ALTER TABLE rentals ADD COLUMN client_request_id TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_rentals_client_request_id
+        ON rentals(client_request_id)
+        WHERE client_request_id IS NOT NULL;
+    `
   }
 ];

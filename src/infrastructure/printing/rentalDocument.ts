@@ -39,6 +39,7 @@ export function renderRentalDocumentHtml(rental: RentalDetail): string {
             font-size: 12px;
             line-height: 1.45;
           }
+          @page { size: A4; margin: 12mm; }
           main { padding: 24px 28px; }
           header {
             border-bottom: 2px solid #f2a51a;
@@ -57,13 +58,23 @@ export function renderRentalDocumentHtml(rental: RentalDetail): string {
             text-transform: uppercase;
           }
           table { border-collapse: collapse; margin-top: 8px; width: 100%; }
+          thead { display: table-header-group; }
+          tfoot { display: table-footer-group; }
+          tr { break-inside: avoid; page-break-inside: avoid; }
           th, td { border: 1px solid #d7d7d7; padding: 6px; text-align: left; }
           th { background: #f5f5f5; }
           .numeric { text-align: right; white-space: nowrap; }
           .grid { display: grid; gap: 6px 20px; grid-template-columns: repeat(2, 1fr); margin-top: 8px; }
           .muted { color: #555; }
           .term { margin-top: 18px; text-align: justify; }
-          .signature { display: grid; gap: 28px; grid-template-columns: 1fr 1fr; margin-top: 42px; }
+          .signature {
+            break-inside: avoid;
+            display: grid;
+            gap: 28px;
+            grid-template-columns: 1fr 1fr;
+            margin-top: 42px;
+            page-break-inside: avoid;
+          }
           .line { border-top: 1px solid #222; padding-top: 6px; text-align: center; }
         </style>
       </head>

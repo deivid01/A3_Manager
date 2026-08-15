@@ -25,7 +25,8 @@ const initialForm: Omit<RentalLaunchInput, "customerId" | "items"> = {
   receiverName: "",
   receiverCpf: "",
   paymentMethod: "PIX",
-  installments: null
+  installments: null,
+  clientRequestId: crypto.randomUUID()
 };
 
 export function RentalLaunchView() {
@@ -37,6 +38,7 @@ export function RentalLaunchView() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [lastRental, setLastRental] = useState<RentalDetail | null>(null);
+  const [launching, setLaunching] = useState(false);
 
   const totalIndemnification = useMemo(
     () => items.reduce((total, item) => total + item.quantity * item.unitIndemnificationValueCents, 0),
@@ -44,6 +46,10 @@ export function RentalLaunchView() {
   );
 
   async function launch() {
+    if (launching) {
+      return;
+    }
+
     setError("");
     setMessage("");
     setLastRental(null);
@@ -52,6 +58,7 @@ export function RentalLaunchView() {
       return;
     }
 
+    setLaunching(true);
     try {
       const rental = await window.a3.launchRental({
         ...form,
@@ -63,8 +70,11 @@ export function RentalLaunchView() {
       setMessage(`Locação ${rental.code} lançada com sucesso.`);
       setItems([]);
       setCustomer(null);
+      setForm({ ...initialForm, clientRequestId: crypto.randomUUID() });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível lançar a locação.");
+    } finally {
+      setLaunching(false);
     }
   }
 
@@ -219,9 +229,9 @@ export function RentalLaunchView() {
               </button>
             </div>
           )}
-          <button className="primary-button" type="button" onClick={() => void launch()}>
+          <button className="primary-button" disabled={launching} type="button" onClick={() => void launch()}>
             <Send size={18} />
-            Lançar locação
+            {launching ? "Lançando..." : "Lançar locação"}
           </button>
         </section>
       </div>

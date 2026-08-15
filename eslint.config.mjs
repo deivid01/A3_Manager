@@ -25,7 +25,10 @@ export default [
     languageOptions: {
       globals: {
         console: "readonly",
-        process: "readonly"
+        fetch: "readonly",
+        process: "readonly",
+        setTimeout: "readonly",
+        WebSocket: "readonly"
       }
     }
   }

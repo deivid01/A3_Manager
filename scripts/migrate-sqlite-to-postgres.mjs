@@ -171,6 +171,7 @@ async function ensurePostgresSchema(client) {
       customer_snapshot_json TEXT NOT NULL,
       company_snapshot_json TEXT NOT NULL,
       launched_by_username TEXT NOT NULL,
+      client_request_id TEXT UNIQUE,
       finalized_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL

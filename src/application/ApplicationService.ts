@@ -341,10 +341,22 @@ export class ApplicationService {
   launchRental(input: RentalLaunchInput, userId: string): RentalDetail {
     const data = parseInput(rentalLaunchSchema, input);
     return this.db.transaction(() => {
+      if (data.clientRequestId) {
+        const existing = this.db.queryOne("SELECT id FROM rentals WHERE client_request_id = ?", [
+          data.clientRequestId
+        ]);
+        if (existing) {
+          return this.getRental(String(existing.id));
+        }
+      }
+
       const user = mapUser(this.mustFind("users", userId));
       const customer = mapCustomer(this.mustFind("customers", data.customerId));
       const company = this.getCompany();
       const returnDate = calculateReturnDate(data.startDate, data.period);
+      const installments = data.paymentMethod === "CREDIT_CARD" ? data.installments : null;
+      const receiverName = data.receiverIsCustomer ? "" : (data.receiverName ?? "");
+      const receiverCpf = data.receiverIsCustomer ? "" : (data.receiverCpf ?? "");
       const ids = new Set(data.items.map((item) => item.equipmentId));
       if (ids.size !== data.items.length) {
         throw new AppError("VALIDATION_ERROR", "Cada equipamento deve aparecer apenas uma vez na locação.");
@@ -360,8 +372,8 @@ export class ApplicationService {
            delivery_state, receiver_is_customer, receiver_name, receiver_cpf, payment_method,
            installments, customer_name_snapshot, customer_name_snapshot_normalized,
            customer_snapshot_json, company_snapshot_json, launched_by_username,
-           finalized_at, created_at, updated_at)
-         VALUES (?, ?, 'ONGOING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+           client_request_id, finalized_at, created_at, updated_at)
+         VALUES (?, ?, 'ONGOING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
         [
           rentalId,
           code,
@@ -377,15 +389,16 @@ export class ApplicationService {
           data.deliveryCity ?? "",
           data.deliveryState ?? "",
           data.receiverIsCustomer ? 1 : 0,
-          data.receiverName ?? "",
-          data.receiverCpf ?? "",
+          receiverName,
+          receiverCpf,
           data.paymentMethod,
-          data.installments,
+          installments,
           customer.name,
           normalizeSearch(customer.name),
           JSON.stringify(customer),
           JSON.stringify(company),
           user.username,
+          data.clientRequestId ?? null,
           now,
           now
         ]
@@ -442,11 +455,16 @@ export class ApplicationService {
     const totalRow = this.db.queryOne(`SELECT COUNT(*) AS total FROM rentals r ${where}`, params);
     const rows = this.db
       .queryAll(
-        `SELECT r.*, COALESCE(SUM(ri.quantity), 0) AS total_items
+        `SELECT
+           r.id, r.code, r.status, r.customer_name_snapshot, r.start_date,
+           r.return_date, r.created_at,
+           COALESCE((
+             SELECT SUM(ri.quantity)
+             FROM rental_items ri
+             WHERE ri.rental_id = r.id
+           ), 0) AS total_items
          FROM rentals r
-         LEFT JOIN rental_items ri ON ri.rental_id = r.id
          ${where}
-         GROUP BY r.id
          ORDER BY r.created_at DESC, r.code DESC
          LIMIT ? OFFSET ?`,
         [...params, pageSize, (page - 1) * pageSize]
