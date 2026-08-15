@@ -1,62 +1,61 @@
-import { FileDown, Printer, Search, Send, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { CalendarDays, Check, CreditCard, Minus, PackagePlus, Plus, Search, Trash2, UserRound, UsersRound, WalletCards } from "lucide-react";
+import { useMemo, useState } from "react";
+import { calculateReturnDate } from "../../domain/dateRules";
 import { paymentLabels, periodLabels } from "../../domain/labels";
 import { formatCents } from "../../domain/money";
 import { formatCep, formatCpf } from "../../domain/normalization";
-import { PAYMENT_METHODS, RENTAL_PERIODS } from "../../domain/types";
-import type { CustomerSearchResult, EquipmentSearchResult, RentalDetail } from "../../domain/types";
+import { PAYMENT_METHODS, RENTAL_PERIODS, type CustomerSearchResult, type EquipmentSearchResult, type RentalDetail } from "../../domain/types";
 import type { RentalLaunchInput } from "../../shared/contracts";
-import { Field, Message, SelectField, UfSelect } from "../components/Form";
+import { AppButton, EmptyState, Field, IconButton, PageHeader, SectionCard, SelectField, UfSelect } from "../components/Form";
+import { CustomerSearchModal, EquipmentSearchModal, RentalReview, RentalSuccessModal } from "./RentalLaunchDialogs";
 
-interface SelectedItem extends EquipmentSearchResult {
-  quantity: number;
+interface SelectedItem extends EquipmentSearchResult { quantity: number; }
+type RentalDraft = Omit<RentalLaunchInput, "customerId" | "items">;
+
+function buildInitialForm(): RentalDraft {
+  return {
+    period: "MONTHLY",
+    startDate: new Date().toISOString().slice(0, 10),
+    deliveryStreet: "",
+    deliveryNeighborhood: "",
+    deliveryNumber: "",
+    deliveryCep: "",
+    deliveryCity: "",
+    deliveryState: "",
+    receiverIsCustomer: true,
+    receiverName: "",
+    receiverCpf: "",
+    paymentMethod: "PIX",
+    installments: null,
+    clientRequestId: crypto.randomUUID(),
+  };
 }
 
-const initialForm: Omit<RentalLaunchInput, "customerId" | "items"> = {
-  period: "MONTHLY",
-  startDate: new Date().toISOString().slice(0, 10),
-  deliveryStreet: "",
-  deliveryNeighborhood: "",
-  deliveryNumber: "",
-  deliveryCep: "",
-  deliveryCity: "",
-  deliveryState: "",
-  receiverIsCustomer: true,
-  receiverName: "",
-  receiverCpf: "",
-  paymentMethod: "PIX",
-  installments: null,
-  clientRequestId: crypto.randomUUID()
-};
-
 export function RentalLaunchView() {
-  const [form, setForm] = useState(initialForm);
+  const [form, setForm] = useState(buildInitialForm);
   const [customer, setCustomer] = useState<CustomerSearchResult | null>(null);
   const [items, setItems] = useState<SelectedItem[]>([]);
   const [customerModal, setCustomerModal] = useState(false);
   const [equipmentModal, setEquipmentModal] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
   const [lastRental, setLastRental] = useState<RentalDetail | null>(null);
   const [launching, setLaunching] = useState(false);
+  const [error, setError] = useState("");
 
-  const totalIndemnification = useMemo(
-    () => items.reduce((total, item) => total + item.quantity * item.unitIndemnificationValueCents, 0),
-    [items]
+  const returnDate = useMemo(() => {
+    try { return calculateReturnDate(form.startDate, form.period); }
+    catch { return ""; }
+  }, [form.startDate, form.period]);
+  const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+  const totalIndemnification = items.reduce(
+    (sum, item) => sum + item.quantity * item.unitIndemnificationValueCents,
+    0,
   );
 
   async function launch() {
-    if (launching) {
-      return;
-    }
-
+    if (launching) return;
     setError("");
-    setMessage("");
-    setLastRental(null);
-    if (!customer) {
-      setError("Selecione o cliente da locação.");
-      return;
-    }
+    if (!customer) { setError("Selecione o cliente da locação."); return; }
+    if (items.length === 0) { setError("Adicione ao menos um equipamento."); return; }
 
     setLaunching(true);
     try {
@@ -64,13 +63,12 @@ export function RentalLaunchView() {
         ...form,
         customerId: customer.id,
         installments: form.paymentMethod === "CREDIT_CARD" ? form.installments : null,
-        items: items.map((item) => ({ equipmentId: item.id, quantity: item.quantity }))
+        items: items.map((item) => ({ equipmentId: item.id, quantity: item.quantity })),
       });
       setLastRental(rental);
-      setMessage(`Locação ${rental.code} lançada com sucesso.`);
       setItems([]);
       setCustomer(null);
-      setForm({ ...initialForm, clientRequestId: crypto.randomUUID() });
+      setForm(buildInitialForm());
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível lançar a locação.");
     } finally {
@@ -79,288 +77,192 @@ export function RentalLaunchView() {
   }
 
   function addEquipment(equipment: EquipmentSearchResult) {
-    setItems((current) => {
-      if (current.some((item) => item.id === equipment.id)) {
-        return current;
-      }
-      return [...current, { ...equipment, quantity: Math.min(1, equipment.stockQuantity) }];
-    });
+    setItems((current) => current.some((item) => item.id === equipment.id)
+      ? current
+      : [...current, { ...equipment, quantity: 1 }]);
     setEquipmentModal(false);
   }
 
-  function changeQuantity(id: string, quantity: number) {
-    setItems((current) =>
-      current.map((item) =>
-        item.id === id ? { ...item, quantity: Math.min(Math.max(1, quantity), item.stockQuantity) } : item
-      )
-    );
+  function changeQuantity(id: string, delta: number) {
+    setItems((current) => current.map((item) => item.id === id
+      ? { ...item, quantity: Math.min(item.stockQuantity, Math.max(1, item.quantity + delta)) }
+      : item));
   }
 
   return (
-    <section className="view">
-      <header className="view-header">
-        <div>
-          <h1>Nova locação</h1>
-          <p>Lançamento com baixa transacional de estoque.</p>
+    <section className="view" data-screen="rental-launch">
+      <PageHeader
+        eyebrow="Operação"
+        title="Nova locação"
+        description="Monte o pedido, confira os dados e faça a baixa de estoque com segurança."
+      />
+      <div className="rental-launch-layout">
+        <div className="rental-flow">
+          <CustomerSection customer={customer} onSearch={() => setCustomerModal(true)} />
+          <EquipmentSection
+            items={items}
+            onSearch={() => setEquipmentModal(true)}
+            onQuantityChange={changeQuantity}
+            onRemove={(id) => setItems((current) => current.filter((item) => item.id !== id))}
+          />
+          <PeriodAndPaymentSection form={form} returnDate={returnDate} onChange={setForm} />
+          <DeliverySection form={form} onChange={setForm} />
         </div>
-      </header>
-
-      <div className="launch-grid">
-        <section className="panel form-grid">
-          <h2>Cliente e período</h2>
-          <button className="selector-button" type="button" onClick={() => setCustomerModal(true)}>
-            <Search size={18} />
-            {customer ? `${customer.name} - ${customer.cpf}` : "Selecionar cliente"}
-          </button>
-          <SelectField label="Período" value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value as RentalLaunchInput["period"] })}>
-            {RENTAL_PERIODS.map((period) => (
-              <option key={period} value={period}>
-                {periodLabels[period]}
-              </option>
-            ))}
-          </SelectField>
-          <Field label="Data de início" type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
-          <SelectField label="Pagamento" value={form.paymentMethod} onChange={(e) => setForm({ ...form, paymentMethod: e.target.value as RentalLaunchInput["paymentMethod"] })}>
-            {PAYMENT_METHODS.map((method) => (
-              <option key={method} value={method}>
-                {paymentLabels[method]}
-              </option>
-            ))}
-          </SelectField>
-          {form.paymentMethod === "CREDIT_CARD" && (
-            <Field
-              label="Parcelas"
-              min="1"
-              type="number"
-              value={form.installments ?? ""}
-              onChange={(e) => setForm({ ...form, installments: Number(e.target.value) || null })}
-            />
-          )}
-        </section>
-
-        <section className="panel form-grid">
-          <h2>Entrega</h2>
-          <Field label="Rua" value={form.deliveryStreet} onChange={(e) => setForm({ ...form, deliveryStreet: e.target.value })} />
-          <Field label="Número" value={form.deliveryNumber} onChange={(e) => setForm({ ...form, deliveryNumber: e.target.value })} />
-          <Field label="Bairro" value={form.deliveryNeighborhood} onChange={(e) => setForm({ ...form, deliveryNeighborhood: e.target.value })} />
-          <Field label="CEP" value={form.deliveryCep} onChange={(e) => setForm({ ...form, deliveryCep: formatCep(e.target.value) })} />
-          <Field label="Cidade" value={form.deliveryCity} onChange={(e) => setForm({ ...form, deliveryCity: e.target.value })} />
-          <UfSelect allowEmpty value={form.deliveryState} onChange={(e) => setForm({ ...form, deliveryState: e.target.value as RentalLaunchInput["deliveryState"] })} />
-          <label className="toggle-row">
-            <input
-              checked={form.receiverIsCustomer}
-              type="checkbox"
-              onChange={(e) => setForm({ ...form, receiverIsCustomer: e.target.checked })}
-            />
-            <span>O locatário receberá os equipamentos</span>
-          </label>
-          {!form.receiverIsCustomer && (
-            <>
-              <Field label="Nome do recebedor" value={form.receiverName} onChange={(e) => setForm({ ...form, receiverName: e.target.value })} />
-              <Field label="CPF do recebedor" value={form.receiverCpf} onChange={(e) => setForm({ ...form, receiverCpf: formatCpf(e.target.value) })} />
-            </>
-          )}
-        </section>
-
-        <section className="panel equipment-panel">
-          <div className="panel-title-row">
-            <h2>Equipamentos</h2>
-            <button className="ghost-button" type="button" onClick={() => setEquipmentModal(true)}>
-              <Search size={18} />
-              Adicionar
-            </button>
-          </div>
-          {items.length === 0 ? (
-            <div className="empty-state">Nenhum equipamento selecionado.</div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Equipamento</th>
-                    <th>Estoque</th>
-                    <th>Qtd.</th>
-                    <th>Indenização</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.name}</td>
-                      <td>{item.stockQuantity}</td>
-                      <td>
-                        <input
-                          className="qty-input"
-                          min="1"
-                          max={item.stockQuantity}
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => changeQuantity(item.id, Number(e.target.value))}
-                        />
-                      </td>
-                      <td>{formatCents(item.quantity * item.unitIndemnificationValueCents)}</td>
-                      <td>
-                        <button className="icon-button danger" type="button" title="Remover" onClick={() => setItems(items.filter((row) => row.id !== item.id))}>
-                          <Trash2 size={17} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="summary-line">
-            <strong>Total de indenização:</strong>
-            <span>{formatCents(totalIndemnification)}</span>
-          </div>
-          {error && <Message kind="error">{error}</Message>}
-          {message && <Message kind="success">{message}</Message>}
-          {lastRental && (
-            <div className="actions">
-              <button className="ghost-button" type="button" onClick={() => window.a3.saveRentalPdf(lastRental.id)}>
-                <FileDown size={18} />
-                Salvar PDF
-              </button>
-              <button className="ghost-button" type="button" onClick={() => window.a3.printRental(lastRental.id)}>
-                <Printer size={18} />
-                Imprimir
-              </button>
-            </div>
-          )}
-          <button className="primary-button" disabled={launching} type="button" onClick={() => void launch()}>
-            <Send size={18} />
-            {launching ? "Lançando..." : "Lançar locação"}
-          </button>
-        </section>
+        <RentalReview
+          customerName={customer?.name}
+          form={form}
+          totalQuantity={totalQuantity}
+          totalIndemnification={totalIndemnification}
+          returnDate={returnDate}
+          error={error}
+          launching={launching}
+          onLaunch={() => void launch()}
+        />
       </div>
 
       {customerModal && (
         <CustomerSearchModal
           onClose={() => setCustomerModal(false)}
-          onSelect={(selected) => {
-            setCustomer(selected);
-            setCustomerModal(false);
-            setMessage("Cliente selecionado e dados carregados.");
-          }}
+          onSelect={(selected) => { setCustomer(selected); setCustomerModal(false); }}
         />
       )}
       {equipmentModal && (
-        <EquipmentSearchModal onClose={() => setEquipmentModal(false)} onSelect={addEquipment} />
+        <EquipmentSearchModal
+          selectedIds={items.map((item) => item.id)}
+          onClose={() => setEquipmentModal(false)}
+          onSelect={addEquipment}
+        />
       )}
+      {lastRental && <RentalSuccessModal rental={lastRental} onClose={() => setLastRental(null)} />}
     </section>
   );
 }
 
-function CustomerSearchModal({
-  onClose,
-  onSelect
-}: {
-  onClose(): void;
-  onSelect(customer: CustomerSearchResult): void;
-}) {
-  const [search, setSearch] = useState("");
-  const [results, setResults] = useState<CustomerSearchResult[]>([]);
-
-  useEffect(() => {
-    const handle = window.setTimeout(() => {
-      window.a3.searchCustomers(search).then(setResults).catch(() => setResults([]));
-    }, 250);
-    return () => window.clearTimeout(handle);
-  }, [search]);
-
+function CustomerSection({ customer, onSearch }: { customer: CustomerSearchResult | null; onSearch(): void }) {
   return (
-    <div className="modal-backdrop">
-      <section className="modal">
-        <header>
-          <h2>Selecionar cliente</h2>
-          <button className="icon-button" type="button" title="Fechar" onClick={onClose}>
-            <X size={18} />
-          </button>
-        </header>
-        <label className="search-field modal-search">
-          <Search size={17} />
-          <input autoFocus placeholder="Digite nome ou CPF" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </label>
-        <SearchResults
-          emptyText="Digite ao menos 2 letras ou 3 números para buscar."
-          rows={results.map((customer) => ({
-            id: customer.id,
-            title: customer.name,
-            subtitle: `${customer.cpf} · ${customer.city}`,
-            onClick: () => onSelect(customer)
-          }))}
-        />
-      </section>
-    </div>
+    <SectionCard
+      title="1. Cliente"
+      description="Selecione quem ficará responsável pela locação."
+      action={<AppButton variant="ghost" icon={<Search size={17} />} type="button" onClick={onSearch}>{customer ? "Trocar cliente" : "Buscar cliente"}</AppButton>}
+    >
+      {customer ? (
+        <div className="selected-customer">
+          <span className="selection-icon"><UserRound size={20} /></span>
+          <div>
+            <span>Cliente selecionado</span>
+            <strong>{customer.name}</strong>
+            <small>{customer.cpf} · {customer.city} · {customer.contact || "Sem contato"}</small>
+          </div>
+          <Check size={20} />
+        </div>
+      ) : (
+        <EmptyState icon={<UsersRound size={25} />} title="Nenhum cliente selecionado" description="A busca só exibe resultados depois que você digitar nome ou CPF." />
+      )}
+    </SectionCard>
   );
 }
 
-function EquipmentSearchModal({
-  onClose,
-  onSelect
-}: {
-  onClose(): void;
-  onSelect(equipment: EquipmentSearchResult): void;
+function EquipmentSection({ items, onSearch, onQuantityChange, onRemove }: {
+  items: SelectedItem[];
+  onSearch(): void;
+  onQuantityChange(id: string, delta: number): void;
+  onRemove(id: string): void;
 }) {
-  const [search, setSearch] = useState("");
-  const [results, setResults] = useState<EquipmentSearchResult[]>([]);
-
-  useEffect(() => {
-    const handle = window.setTimeout(() => {
-      window.a3.searchEquipment(search).then(setResults).catch(() => setResults([]));
-    }, 250);
-    return () => window.clearTimeout(handle);
-  }, [search]);
-
   return (
-    <div className="modal-backdrop">
-      <section className="modal">
-        <header>
-          <h2>Selecionar equipamento</h2>
-          <button className="icon-button" type="button" title="Fechar" onClick={onClose}>
-            <X size={18} />
-          </button>
-        </header>
-        <label className="search-field modal-search">
-          <Search size={17} />
-          <input autoFocus placeholder="Digite o nome do equipamento" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </label>
-        <SearchResults
-          emptyText="Digite ao menos 2 letras para buscar."
-          rows={results.map((equipment) => ({
-            id: equipment.id,
-            title: equipment.name,
-            subtitle: `Estoque disponível: ${equipment.stockQuantity}`,
-            disabled: equipment.stockQuantity <= 0,
-            onClick: () => onSelect(equipment)
-          }))}
-        />
-      </section>
-    </div>
+    <SectionCard
+      title="2. Equipamentos"
+      description="Adicione itens e ajuste as quantidades dentro do estoque disponível."
+      action={<AppButton variant="ghost" icon={<PackagePlus size={17} />} type="button" onClick={onSearch}>Adicionar equipamento</AppButton>}
+    >
+      {items.length === 0 ? (
+        <EmptyState icon={<PackagePlus size={25} />} title="Nenhum equipamento adicionado" description="Os itens escolhidos aparecerão aqui para ajuste de quantidade." />
+      ) : (
+        <div className="selected-equipment-list">
+          {items.map((item) => (
+            <div className="selected-equipment" key={item.id}>
+              <div className="equipment-main">
+                <strong>{item.name}</strong>
+                <span>{item.stockQuantity} disponível{item.stockQuantity === 1 ? "" : "is"} · {formatCents(item.unitIndemnificationValueCents)} por unidade</span>
+              </div>
+              <div className="quantity-stepper" aria-label={`Quantidade de ${item.name}`}>
+                <IconButton type="button" title="Diminuir quantidade" onClick={() => onQuantityChange(item.id, -1)} disabled={item.quantity <= 1}><Minus size={15} /></IconButton>
+                <strong>{item.quantity}</strong>
+                <IconButton type="button" title="Aumentar quantidade" onClick={() => onQuantityChange(item.id, 1)} disabled={item.quantity >= item.stockQuantity}><Plus size={15} /></IconButton>
+              </div>
+              <strong className="equipment-total">{formatCents(item.quantity * item.unitIndemnificationValueCents)}</strong>
+              <IconButton className="danger" type="button" title="Remover equipamento" onClick={() => onRemove(item.id)}><Trash2 size={17} /></IconButton>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
   );
 }
 
-function SearchResults({
-  rows,
-  emptyText
-}: {
-  rows: Array<{ id: string; title: string; subtitle: string; disabled?: boolean; onClick(): void }>;
-  emptyText: string;
-}) {
-  if (rows.length === 0) {
-    return <div className="empty-state">{emptyText}</div>;
-  }
-
+function PeriodAndPaymentSection({ form, returnDate, onChange }: { form: RentalDraft; returnDate: string; onChange(form: RentalDraft): void }) {
   return (
-    <div className="search-results">
-      {rows.map((row) => (
-        <button key={row.id} disabled={row.disabled} type="button" onClick={row.onClick}>
-          <strong>{row.title}</strong>
-          <span>{row.subtitle}</span>
-        </button>
-      ))}
-    </div>
+    <SectionCard title="3. Período e pagamento" description="A devolução é calculada automaticamente a partir da data inicial.">
+      <div className="choice-group">
+        <span className="field-label">Período da locação</span>
+        <div className="choice-grid periods">
+          {RENTAL_PERIODS.map((period) => (
+            <button className={form.period === period ? "choice-button selected" : "choice-button"} key={period} type="button" onClick={() => onChange({ ...form, period })}>
+              <span>{periodLabels[period]}</span>{form.period === period && <Check size={16} />}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="date-row">
+        <Field label="Data de início" type="date" value={form.startDate} onChange={(event) => onChange({ ...form, startDate: event.target.value })} />
+        <div className="return-date"><CalendarDays size={20} /><div><span>Devolução prevista</span><strong>{returnDate ? formatDate(returnDate) : "Selecione uma data"}</strong></div></div>
+      </div>
+      <div className="choice-group">
+        <span className="field-label">Forma de pagamento</span>
+        <div className="choice-grid payments">
+          {PAYMENT_METHODS.map((method) => (
+            <button className={form.paymentMethod === method ? "choice-button selected" : "choice-button"} key={method} type="button" onClick={() => onChange({ ...form, paymentMethod: method, installments: method === "CREDIT_CARD" ? form.installments : null })}>
+              {method === "PIX" ? <WalletCards size={18} /> : <CreditCard size={18} />}<span>{paymentLabels[method]}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      {form.paymentMethod === "CREDIT_CARD" && (
+        <SelectField label="Parcelas" value={form.installments ?? ""} onChange={(event) => onChange({ ...form, installments: Number(event.target.value) || null })}>
+          <option value="">Selecione</option>
+          {Array.from({ length: 12 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}x</option>)}
+        </SelectField>
+      )}
+    </SectionCard>
   );
+}
+
+function DeliverySection({ form, onChange }: { form: RentalDraft; onChange(form: RentalDraft): void }) {
+  return (
+    <SectionCard title="4. Entrega e recebedor" description="Informe o destino dos equipamentos e quem fará o recebimento.">
+      <div className="form-grid address">
+        <Field className="span-two" label="Rua" value={form.deliveryStreet} onChange={(event) => onChange({ ...form, deliveryStreet: event.target.value })} />
+        <Field label="Número" value={form.deliveryNumber} onChange={(event) => onChange({ ...form, deliveryNumber: event.target.value })} />
+        <Field label="Bairro" value={form.deliveryNeighborhood} onChange={(event) => onChange({ ...form, deliveryNeighborhood: event.target.value })} />
+        <Field label="CEP" value={form.deliveryCep} onChange={(event) => onChange({ ...form, deliveryCep: formatCep(event.target.value) })} />
+        <Field label="Cidade" value={form.deliveryCity} onChange={(event) => onChange({ ...form, deliveryCity: event.target.value })} />
+        <UfSelect allowEmpty value={form.deliveryState} onChange={(event) => onChange({ ...form, deliveryState: event.target.value as RentalLaunchInput["deliveryState"] })} />
+      </div>
+      <label className="switch-row">
+        <input checked={form.receiverIsCustomer} type="checkbox" onChange={(event) => onChange({ ...form, receiverIsCustomer: event.target.checked })} />
+        <span className="switch-control" />
+        <div><strong>O cliente receberá os equipamentos</strong><span>Desative para informar outra pessoa responsável.</span></div>
+      </label>
+      {!form.receiverIsCustomer && (
+        <div className="form-grid two receiver-fields">
+          <Field label="Nome do recebedor" value={form.receiverName} onChange={(event) => onChange({ ...form, receiverName: event.target.value })} />
+          <Field label="CPF do recebedor" value={form.receiverCpf} onChange={(event) => onChange({ ...form, receiverCpf: formatCpf(event.target.value) })} />
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function formatDate(value: string): string {
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
 }

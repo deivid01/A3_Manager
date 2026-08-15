@@ -1,10 +1,13 @@
 import path from "node:path";
 import fs from "node:fs";
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, shell } from "electron";
 import { ApplicationService } from "../application/ApplicationService";
 import { AppError, toSafeError } from "../domain/appError";
 import type { User } from "../domain/types";
-import { SqlJsDatabase, resolveDatabasePath } from "../infrastructure/database/SqlJsDatabase";
+import {
+  SqlJsDatabase,
+  resolveDatabasePath,
+} from "../infrastructure/database/SqlJsDatabase";
 import { FileLogger } from "../infrastructure/logging/FileLogger";
 import { ElectronPrintService } from "../infrastructure/printing/ElectronPrintService";
 import type {
@@ -14,7 +17,7 @@ import type {
   LoginInput,
   RentalFilters,
   RentalLaunchInput,
-  UserInput
+  UserInput,
 } from "../shared/contracts";
 import { appDisplayName, developerUrl } from "../shared/env";
 import { ipcChannels } from "../shared/ipc";
@@ -30,7 +33,9 @@ void app
   .then(async () => {
     logger = FileLogger.open(app.getPath("userData"));
     logger.info("app_start", { version: app.getVersion() });
-    const database = await SqlJsDatabase.open(resolveDatabasePath(app.getPath("userData")));
+    const database = await SqlJsDatabase.open(
+      resolveDatabasePath(app.getPath("userData")),
+    );
     service = new ApplicationService(database);
     printService = new ElectronPrintService();
     await service.initialize();
@@ -56,20 +61,24 @@ app.on("window-all-closed", () => {
 });
 
 async function createMainWindow(): Promise<void> {
+  Menu.setApplicationMenu(null);
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
-    minWidth: 1024,
-    minHeight: 680,
+    minWidth: 760,
+    minHeight: 600,
     title: appDisplayName,
     icon: resolveWindowIconPath(),
     show: false,
+    frame: false,
+    titleBarStyle: "hidden",
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
-    }
+      sandbox: true,
+    },
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -86,6 +95,8 @@ async function createMainWindow(): Promise<void> {
   });
 
   mainWindow.once("ready-to-show", () => mainWindow?.show());
+  mainWindow.on("maximize", () => notifyMaximizedChanged(true));
+  mainWindow.on("unmaximize", () => notifyMaximizedChanged(false));
 
   const devServerUrl = process.env.VITE_DEV_SERVER_URL;
   if (devServerUrl) {
@@ -96,10 +107,14 @@ async function createMainWindow(): Promise<void> {
 }
 
 function resolveWindowIconPath(): string | undefined {
-  const electronProcess = process as NodeJS.Process & { resourcesPath?: string };
+  const electronProcess = process as NodeJS.Process & {
+    resourcesPath?: string;
+  };
   const candidates = [
-    electronProcess.resourcesPath ? path.join(electronProcess.resourcesPath, "icon.ico") : "",
-    path.join(process.cwd(), "build", "icon.ico")
+    electronProcess.resourcesPath
+      ? path.join(electronProcess.resourcesPath, "icon.ico")
+      : "",
+    path.join(process.cwd(), "build", "icon.ico"),
   ].filter(Boolean);
   return candidates.find((candidate) => fs.existsSync(candidate));
 }
@@ -116,7 +131,7 @@ function registerIpcHandlers(): void {
   handle(ipcChannels.appInfo, () => ({
     name: appDisplayName,
     version: app.getVersion(),
-    developerUrl
+    developerUrl,
   }));
   handle(ipcChannels.openExternal, async (url) => {
     const safeUrl = String(url ?? "");
@@ -125,6 +140,24 @@ function registerIpcHandlers(): void {
     }
     await shell.openExternal(safeUrl);
   });
+  handle(ipcChannels.windowMinimize, () => {
+    mainWindow?.minimize();
+  });
+  handle(ipcChannels.windowToggleMaximize, () => {
+    if (mainWindow?.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow?.maximize();
+    }
+    return mainWindow?.isMaximized() ?? false;
+  });
+  handle(ipcChannels.windowClose, () => {
+    mainWindow?.close();
+  });
+  handle(
+    ipcChannels.windowIsMaximized,
+    () => mainWindow?.isMaximized() ?? false,
+  );
   handle(ipcChannels.login, async (input) => {
     currentUser = await service.login(input as LoginInput);
     return currentUser;
@@ -211,7 +244,16 @@ function registerIpcHandlers(): void {
   });
 }
 
-function handle(channel: string, action: (...args: unknown[]) => unknown): void {
+function notifyMaximizedChanged(maximized: boolean): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(ipcChannels.windowMaximizedChanged, maximized);
+  }
+}
+
+function handle(
+  channel: string,
+  action: (...args: unknown[]) => unknown,
+): void {
   ipcMain.handle(channel, async (_event, ...args) => {
     try {
       const data = await action(...args);
@@ -235,7 +277,10 @@ function requireSession(): User {
 function requireAdmin(): User {
   const user = requireSession();
   if (user.role !== "ADMIN") {
-    throw new AppError("AUTH_FORBIDDEN", "Apenas administradores podem executar esta ação.");
+    throw new AppError(
+      "AUTH_FORBIDDEN",
+      "Apenas administradores podem executar esta ação.",
+    );
   }
   return user;
 }

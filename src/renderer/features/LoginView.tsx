@@ -1,18 +1,18 @@
-import { Eye, EyeOff, LogIn } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { Eye, EyeOff, LockKeyhole, LogIn, UserRound } from "lucide-react";
+import { type FormEvent, useState } from "react";
 import { normalizeUsername } from "../../domain/normalization";
-import type { AppInfo } from "../../shared/contracts";
 import type { User } from "../../domain/types";
-import { Field, Message } from "../components/Form";
+import type { AppInfo } from "../../shared/contracts";
+import { AppButton, Field, IconButton, Message } from "../components/Form";
 
 export function LoginView({
   appInfo,
-  onLogin
+  onLogin,
 }: {
   appInfo: AppInfo;
   onLogin(user: User): void;
 }) {
-  const [username, setUsername] = useState("SYSTEM DEV");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -20,13 +20,15 @@ export function LoginView({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (loading) return;
     setLoading(true);
     setError("");
     try {
-      const user = await window.a3.login({ username, password });
-      onLogin(user);
+      onLogin(await window.a3.login({ username, password }));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Não foi possível entrar.");
+      setError(
+        caught instanceof Error ? caught.message : "Não foi possível entrar.",
+      );
     } finally {
       setLoading(false);
     }
@@ -34,42 +36,80 @@ export function LoginView({
 
   return (
     <main className="login-screen">
+      <div className="login-brand-field" aria-hidden="true">
+        <span>A3</span>
+        <small>LOCAÇÃO</small>
+      </div>
+
       <section className="login-panel">
-        <img src={`${import.meta.env.BASE_URL}logo-A3.jpg`} alt="A3 Manager" />
-        <h1>A3 Manager</h1>
-        <p>Gestão local de locações e equipamentos</p>
-        <form onSubmit={submit}>
+        <header className="login-header">
+          <div className="login-logo-stage">
+            <img
+              src={`${import.meta.env.BASE_URL}logo-A3.jpg`}
+              alt="A3 Locação"
+            />
+          </div>
+          <span className="eyebrow">Acesso operacional</span>
+          <h1>A3 Manager</h1>
+          <p>Locações, equipamentos e estoque em um só ambiente.</p>
+        </header>
+
+        <form onSubmit={submit} className="login-form">
           <Field
             autoFocus
+            autoComplete="username"
             label="Usuário"
+            placeholder="Digite seu usuário"
+            leadingIcon={<UserRound size={18} />}
             value={username}
-            onChange={(event) => setUsername(normalizeUsername(event.target.value))}
+            onChange={(event) =>
+              setUsername(normalizeUsername(event.target.value))
+            }
           />
-          <label className="field password-field">
-            <span>Senha</span>
-            <input
-              value={password}
-              type={showPassword ? "text" : "password"}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            <button
-              className="icon-button inside"
-              type="button"
-              title={showPassword ? "Ocultar senha" : "Mostrar senha"}
-              onClick={() => setShowPassword((value) => !value)}
-            >
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </label>
+          <Field
+            autoComplete="current-password"
+            label="Senha"
+            placeholder="Digite sua senha"
+            leadingIcon={<LockKeyhole size={18} />}
+            trailingAction={
+              <IconButton
+                className="field-icon-button"
+                type="button"
+                title={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                onClick={() => setShowPassword((value) => !value)}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </IconButton>
+            }
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+
           {error && <Message kind="error">{error}</Message>}
-          <button className="primary-button" disabled={loading} type="submit">
-            <LogIn size={18} />
-            {loading ? "Entrando..." : "Entrar"}
-          </button>
+          <AppButton
+            className="login-submit"
+            disabled={!username || !password}
+            icon={<LogIn size={18} />}
+            loading={loading}
+            type="submit"
+            variant="primary"
+          >
+            {loading ? "Verificando acesso" : "Entrar no A3 Manager"}
+          </AppButton>
         </form>
-        <footer>
-          <span>{appInfo.version ? `Versão ${appInfo.version}` : "Versão carregando"}</span>
-          <button type="button" onClick={() => window.a3.openExternal(appInfo.developerUrl)}>
+
+        <footer className="login-footer">
+          <span>
+            {appInfo.version
+              ? `Versão ${appInfo.version}`
+              : "Versão carregando"}
+          </span>
+          <button
+            type="button"
+            onClick={() => window.a3.openExternal(appInfo.developerUrl)}
+          >
             Feito por Deivid Peres
           </button>
         </footer>

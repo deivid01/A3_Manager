@@ -1,6 +1,11 @@
 export const ipcChannels = {
   appInfo: "app:info",
   openExternal: "app:open-external",
+  windowMinimize: "window:minimize",
+  windowToggleMaximize: "window:toggle-maximize",
+  windowClose: "window:close",
+  windowIsMaximized: "window:is-maximized",
+  windowMaximizedChanged: "window:maximized-changed",
   login: "auth:login",
   listUsers: "users:list",
   createUser: "users:create",
@@ -21,5 +26,5 @@ export const ipcChannels = {
   getRental: "rentals:get",
   finalizeRental: "rentals:finalize",
   saveRentalPdf: "rentals:save-pdf",
-  printRental: "rentals:print"
+  printRental: "rentals:print",
 } as const;

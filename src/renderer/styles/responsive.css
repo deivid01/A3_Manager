@@ -1,0 +1,112 @@
+@media (max-width: 1240px) {
+  .rental-row { gap: 12px; grid-template-columns: minmax(145px, 0.8fr) minmax(170px, 1.2fr) auto minmax(165px, 0.9fr) auto; }
+  .rental-row > .app-button { grid-column: 5; }
+  .rental-items { display: none; }
+  .choice-grid.periods { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .choice-grid.payments { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1080px) {
+  .app-shell { grid-template-columns: 78px minmax(0, 1fr); }
+  .sidebar { padding-left: 9px; padding-right: 9px; }
+  .sidebar-brand { justify-content: center; padding-left: 0; padding-right: 0; }
+  .sidebar-logo { height: 39px; width: 54px; }
+  .sidebar-brand-copy, .nav-label, .nav-button span, .developer-credit, .session-copy { display: none; }
+  .nav-button { justify-content: center; padding: 0; }
+  .session-card { background: transparent; border: 0; display: grid; grid-template-columns: 1fr; justify-items: center; padding: 0; }
+  .session-avatar { display: none; }
+  .filter-grid { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
+  .rental-row { grid-template-columns: minmax(145px, 0.8fr) minmax(165px, 1.2fr) auto minmax(175px, 0.9fr) auto; }
+  .rental-row > .app-button { grid-column: 5; }
+}
+
+@media (max-width: 900px) {
+  .rental-launch-layout { grid-template-columns: 1fr; }
+  .rental-review { position: static; }
+  .rental-review dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rental-row { grid-template-columns: minmax(150px, 0.85fr) minmax(160px, 1.2fr) auto; }
+  .rental-row > .status-badge { justify-self: start; }
+  .rental-dates { grid-column: 1 / 3; grid-row: 2; }
+  .rental-row > .app-button { grid-column: 3; grid-row: 2; }
+}
+
+@media (max-width: 760px) {
+  .desktop-window { grid-template-rows: 38px minmax(0, 1fr); }
+  .app-shell { display: block; height: 100%; }
+  .sidebar { border-right: 0; border-top: 1px solid #373937; bottom: 0; height: 70px; left: 0; padding: 5px 6px; position: fixed; right: 0; top: auto; z-index: 20; }
+  .sidebar-brand, .sidebar-meta, .nav-label { display: none; }
+  .sidebar nav { display: flex; gap: 1px; overflow: hidden; }
+  .nav-button { flex: 1 1 60px; flex-direction: column; gap: 3px; justify-content: center; min-height: 58px; min-width: 60px; padding: 4px 1px; }
+  .nav-button::before { bottom: -1px; height: 3px; left: 50%; top: auto; transform: translateX(-50%); width: 28px; }
+  .nav-button span { display: block; font-size: 9px; white-space: nowrap; }
+  .workspace { height: 100%; }
+  .view { padding: 20px 16px 94px; }
+  .page-header { align-items: stretch; flex-direction: column; gap: 14px; }
+  .page-header-action .app-button { width: 100%; }
+  .section-card-header { align-items: stretch; flex-direction: column; }
+  .data-section > .section-card-header { align-items: stretch; }
+  .search-field { min-width: 0; width: 100%; }
+  .form-grid.address, .form-grid.two { grid-template-columns: 1fr; }
+  .span-two { grid-column: auto; }
+  .form-submit-row { align-items: stretch; flex-direction: column; }
+  .form-submit-row .app-button { width: 100%; }
+  .filter-grid { grid-template-columns: 1fr; }
+  .filter-actions .app-button { flex: 1; }
+  .rental-row { align-items: start; grid-template-columns: minmax(0, 1fr) auto; padding: 14px; }
+  .rental-customer { grid-column: 1 / -1; grid-row: 2; }
+  .rental-row > .status-badge { grid-column: 2; grid-row: 1; }
+  .rental-dates { display: flex; grid-column: 1; grid-row: 3; }
+  .rental-items { display: flex; grid-column: 2; grid-row: 3; justify-self: end; }
+  .rental-row > .app-button { grid-column: 1 / -1; grid-row: 4; width: 100%; }
+  .detail-columns { grid-template-columns: 1fr; }
+  .choice-grid.periods, .choice-grid.payments { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .selected-equipment { grid-template-columns: minmax(0, 1fr) 36px; }
+  .quantity-stepper { grid-column: 1; }
+  .equipment-total { grid-column: 1; text-align: left; }
+  .selected-equipment > .icon-button { grid-column: 2; grid-row: 1; }
+  .rental-review dl { grid-template-columns: 1fr; }
+  .date-row { grid-template-columns: 1fr; }
+  .modal-backdrop { padding: 12px; }
+  .modal-footer .app-button { flex: 1 1 150px; }
+
+  .data-table { display: block; min-width: 0; }
+  .data-table thead { display: none; }
+  .data-table tbody { display: grid; gap: 10px; padding: 10px; }
+  .data-table tr { background: #faf9f5; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); display: grid; padding: 8px 11px; }
+  .data-table td { align-items: center; border-bottom: 1px solid #e5e6e1; display: flex; gap: 16px; justify-content: space-between; min-height: 39px; padding: 7px 0; text-align: right; }
+  .data-table td:last-child { border-bottom: 0; }
+  .data-table td::before { color: var(--text-muted); content: attr(data-label); font-size: 9px; font-weight: 750; text-transform: uppercase; }
+  .row-actions { display: flex !important; }
+}
+
+@media (max-width: 520px) {
+  .window-title span { display: none; }
+  .window-actions button { width: 42px; }
+  .login-screen { padding: 16px; }
+  .login-brand-field { display: none; }
+  .login-panel { gap: 18px; margin-left: 0; padding: 22px 20px 17px; }
+  .login-logo-stage { height: 68px; margin-bottom: 14px; width: 118px; }
+  .login-header h1 { font-size: 26px; }
+  .login-footer { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .page-header h1 { font-size: 24px; }
+  .section-card { padding: 16px; }
+  .data-section { padding: 0; }
+  .active-filters > span:first-child { width: 100%; }
+  .filter-actions { flex-direction: column-reverse; }
+  .detail-overview { grid-template-columns: 1fr; }
+  .choice-grid.periods, .choice-grid.payments { grid-template-columns: 1fr 1fr; }
+  .modal-backdrop { align-items: stretch; padding: 0; }
+  .modal { border: 0; border-radius: 0; height: 100%; max-height: none; max-width: none; width: 100%; }
+  .modal-header, .modal-body { padding-left: 16px; padding-right: 16px; }
+  .modal-footer { padding: 11px 16px; }
+  .modal-footer .app-button { flex-basis: 100%; }
+  .success-rental-code strong { font-size: 16px; }
+}
+
+@media (max-height: 700px) and (min-width: 521px) {
+  .login-panel { gap: 17px; padding-bottom: 17px; padding-top: 22px; }
+  .login-logo-stage { height: 58px; margin-bottom: 12px; width: 105px; }
+  .login-header h1 { font-size: 26px; }
+}

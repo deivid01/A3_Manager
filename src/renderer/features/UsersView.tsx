@@ -1,107 +1,186 @@
-import { Save } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { ShieldCheck, UserPlus, UsersRound } from "lucide-react";
+import { type FormEvent, useEffect, useState } from "react";
+import { roleLabels } from "../../domain/labels";
 import { normalizeUsername } from "../../domain/normalization";
 import type { User } from "../../domain/types";
-import { UserInput } from "../../shared/contracts";
-import { EmptyState, Field, Message, SelectField } from "../components/Form";
-import { roleLabels } from "../../domain/labels";
+import type { UserInput } from "../../shared/contracts";
+import {
+  AppButton,
+  EmptyState,
+  Field,
+  Message,
+  Modal,
+  PageHeader,
+  SectionCard,
+  SelectField,
+  StatusBadge,
+} from "../components/Form";
 
-const emptyForm: UserInput = {
-  username: "",
-  password: "",
-  role: "USER"
-};
+const emptyForm: UserInput = { username: "", password: "", role: "USER" };
 
 export function UsersView() {
   const [rows, setRows] = useState<User[]>([]);
   const [form, setForm] = useState<UserInput>(emptyForm);
+  const [formOpen, setFormOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
     void load();
   }, []);
-
   async function load() {
-    setRows(await window.a3.listUsers());
+    try {
+      setRows(await window.a3.listUsers());
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível carregar os usuários.",
+      );
+    }
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
-    setMessage("");
     try {
       await window.a3.createUser(form);
       setForm(emptyForm);
+      setFormOpen(false);
       setMessage("Usuário criado com sucesso.");
       await load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Não foi possível criar o usuário.");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível criar o usuário.",
+      );
     }
   }
 
   return (
-    <section className="view narrow">
-      <header className="view-header">
-        <div>
-          <h1>Usuários</h1>
-          <p>Cadastro de operadores do sistema.</p>
-        </div>
-      </header>
-
-      <div className="split-layout">
-        <form className="panel form-grid" onSubmit={submit}>
-          <h2>Novo usuário</h2>
-          <Field
-            label="Usuário"
-            value={form.username}
-            onChange={(e) => setForm({ ...form, username: normalizeUsername(e.target.value) })}
+    <section className="view view-medium" data-screen="users">
+      <PageHeader
+        eyebrow="Controle de acesso"
+        title="Usuários"
+        description="Gerencie operadores e os níveis de acesso ao A3 Manager."
+        action={
+          <AppButton
+            variant="primary"
+            icon={<UserPlus size={18} />}
+            type="button"
+            onClick={() => {
+              setError("");
+              setFormOpen(true);
+            }}
+          >
+            Novo usuário
+          </AppButton>
+        }
+      />
+      {message && <Message kind="success">{message}</Message>}
+      {!formOpen && error && <Message kind="error">{error}</Message>}
+      <SectionCard
+        className="data-section"
+        title={`${rows.length} usuário${rows.length === 1 ? "" : "s"}`}
+        description="Contas cadastradas neste ambiente local."
+      >
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={<UsersRound size={25} />}
+            title="Nenhum usuário encontrado"
+            description="Crie uma conta para iniciar o controle de acesso."
           />
-          <Field
-            label="Senha"
-            type="password"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-          />
-          <SelectField label="Perfil" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as UserInput["role"] })}>
-            <option value="USER">Usuário</option>
-            <option value="ADMIN">Administrador</option>
-          </SelectField>
-          {error && <Message kind="error">{error}</Message>}
-          {message && <Message kind="success">{message}</Message>}
-          <button className="primary-button" type="submit">
-            <Save size={18} />
-            Criar usuário
-          </button>
-        </form>
-
-        <div className="panel">
-          {rows.length === 0 ? (
-            <EmptyState>Nenhum usuário encontrado.</EmptyState>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Usuário</th>
-                    <th>Perfil</th>
-                    <th>Status</th>
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Usuário</th>
+                  <th>Perfil</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((user) => (
+                  <tr key={user.id}>
+                    <td data-label="Usuário">
+                      <strong>{user.username}</strong>
+                    </td>
+                    <td data-label="Perfil">
+                      <span className="role-cell">
+                        <ShieldCheck size={16} />
+                        {roleLabels[user.role]}
+                      </span>
+                    </td>
+                    <td data-label="Status">
+                      <StatusBadge kind={user.active ? "success" : "neutral"}>
+                        {user.active ? "Ativo" : "Inativo"}
+                      </StatusBadge>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {rows.map((user) => (
-                    <tr key={user.id}>
-                      <td>{user.username}</td>
-                      <td>{roleLabels[user.role]}</td>
-                      <td>{user.active ? "Ativo" : "Inativo"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
+      {formOpen && (
+        <Modal
+          className="user-form-modal"
+          title="Novo usuário"
+          description="Defina as credenciais e o perfil de acesso."
+          onClose={() => setFormOpen(false)}
+          footer={
+            <>
+              <AppButton
+                type="button"
+                variant="ghost"
+                onClick={() => setFormOpen(false)}
+              >
+                Cancelar
+              </AppButton>
+              <AppButton type="submit" variant="primary" form="user-form">
+                Criar usuário
+              </AppButton>
+            </>
+          }
+        >
+          <form id="user-form" className="dialog-form" onSubmit={submit}>
+            <Field
+              required
+              label="Usuário"
+              placeholder="NOME DO USUÁRIO"
+              value={form.username}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  username: normalizeUsername(e.target.value),
+                })
+              }
+            />
+            <Field
+              required
+              autoComplete="new-password"
+              label="Senha"
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+            <SelectField
+              label="Perfil"
+              value={form.role}
+              onChange={(e) =>
+                setForm({ ...form, role: e.target.value as UserInput["role"] })
+              }
+            >
+              <option value="USER">Usuário</option>
+              <option value="ADMIN">Administrador</option>
+            </SelectField>
+            {error && <Message kind="error">{error}</Message>}
+          </form>
+        </Modal>
+      )}
     </section>
   );
 }

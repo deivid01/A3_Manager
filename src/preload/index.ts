@@ -4,6 +4,11 @@ import type { A3Api } from "../shared/contracts";
 const ipcChannels = {
   appInfo: "app:info",
   openExternal: "app:open-external",
+  windowMinimize: "window:minimize",
+  windowToggleMaximize: "window:toggle-maximize",
+  windowClose: "window:close",
+  windowIsMaximized: "window:is-maximized",
+  windowMaximizedChanged: "window:maximized-changed",
   login: "auth:login",
   listUsers: "users:list",
   createUser: "users:create",
@@ -24,10 +29,12 @@ const ipcChannels = {
   getRental: "rentals:get",
   finalizeRental: "rentals:finalize",
   saveRentalPdf: "rentals:save-pdf",
-  printRental: "rentals:print"
+  printRental: "rentals:print",
 } as const;
 
-type IpcResult<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
+type IpcResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { code: string; message: string } };
 
 async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   const result = (await ipcRenderer.invoke(channel, ...args)) as IpcResult<T>;
@@ -43,6 +50,17 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
 const api: A3Api = {
   appInfo: () => call(ipcChannels.appInfo),
   openExternal: (url) => call(ipcChannels.openExternal, url),
+  minimizeWindow: () => call(ipcChannels.windowMinimize),
+  toggleMaximizeWindow: () => call(ipcChannels.windowToggleMaximize),
+  closeWindow: () => call(ipcChannels.windowClose),
+  isWindowMaximized: () => call(ipcChannels.windowIsMaximized),
+  onWindowMaximizedChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, maximized: boolean) =>
+      listener(maximized);
+    ipcRenderer.on(ipcChannels.windowMaximizedChanged, handler);
+    return () =>
+      ipcRenderer.removeListener(ipcChannels.windowMaximizedChanged, handler);
+  },
   login: (input) => call(ipcChannels.login, input),
   listUsers: () => call(ipcChannels.listUsers),
   createUser: (input) => call(ipcChannels.createUser, input),
@@ -63,7 +81,7 @@ const api: A3Api = {
   getRental: (id) => call(ipcChannels.getRental, id),
   finalizeRental: (id) => call(ipcChannels.finalizeRental, id),
   saveRentalPdf: (id) => call(ipcChannels.saveRentalPdf, id),
-  printRental: (id) => call(ipcChannels.printRental, id)
+  printRental: (id) => call(ipcChannels.printRental, id),
 };
 
 contextBridge.exposeInMainWorld("a3", api);

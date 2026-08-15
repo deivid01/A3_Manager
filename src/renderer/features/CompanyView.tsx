@@ -1,8 +1,15 @@
-import { Save } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
+import { Building2, Save } from "lucide-react";
+import { type FormEvent, useEffect, useState } from "react";
 import { formatCep } from "../../domain/normalization";
-import { CompanyInput } from "../../shared/contracts";
-import { Field, Message, UfSelect } from "../components/Form";
+import type { CompanyInput } from "../../shared/contracts";
+import {
+  AppButton,
+  Field,
+  Message,
+  PageHeader,
+  SectionCard,
+  UfSelect,
+} from "../components/Form";
 
 const emptyForm: CompanyInput = {
   legalName: "",
@@ -15,11 +22,12 @@ const emptyForm: CompanyInput = {
   city: "",
   state: "SP",
   contact: "",
-  email: ""
+  email: "",
 };
 
 export function CompanyView() {
   const [form, setForm] = useState<CompanyInput>(emptyForm);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -38,51 +46,151 @@ export function CompanyView() {
           city: company.city,
           state: company.state as CompanyInput["state"],
           contact: company.contact,
-          email: company.email
-        })
+          email: company.email,
+        }),
       )
-      .catch((caught) => setError(caught instanceof Error ? caught.message : "Falha ao carregar empresa."));
+      .catch((caught) =>
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Falha ao carregar a empresa.",
+        ),
+      );
   }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
     setMessage("");
+    setSaving(true);
     try {
       const saved = await window.a3.saveCompany(form);
       setForm({ ...form, state: saved.state as CompanyInput["state"] });
       setMessage("Dados da empresa atualizados.");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Não foi possível salvar a empresa.");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível salvar a empresa.",
+      );
+    } finally {
+      setSaving(false);
     }
   }
 
   return (
-    <section className="view narrow">
-      <header className="view-header">
-        <div>
-          <h1>Empresa</h1>
-          <p>Dados usados nos contratos e PDFs.</p>
-        </div>
-      </header>
-      <form className="panel form-grid" onSubmit={submit}>
-        <Field label="Razão social" value={form.legalName} onChange={(e) => setForm({ ...form, legalName: e.target.value })} />
-        <Field label="Nome fantasia" value={form.tradeName} onChange={(e) => setForm({ ...form, tradeName: e.target.value })} />
-        <Field label="Documento" value={form.document} onChange={(e) => setForm({ ...form, document: e.target.value })} />
-        <Field label="Contato" value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} />
-        <Field label="E-mail" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-        <Field label="Rua" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
-        <Field label="Número" value={form.number} onChange={(e) => setForm({ ...form, number: e.target.value })} />
-        <Field label="Bairro" value={form.neighborhood} onChange={(e) => setForm({ ...form, neighborhood: e.target.value })} />
-        <Field label="CEP" value={form.cep} onChange={(e) => setForm({ ...form, cep: formatCep(e.target.value) })} />
-        <Field label="Cidade" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-        <UfSelect value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value as CompanyInput["state"] })} />
+    <section className="view view-medium" data-screen="company">
+      <PageHeader
+        eyebrow="Configurações"
+        title="Empresa"
+        description="Dados oficiais usados nos contratos, comprovantes e PDFs."
+      />
+      <form className="company-form" onSubmit={submit}>
+        <SectionCard
+          title="Identidade empresarial"
+          description="Informações fiscais e canais de contato."
+        >
+          <div className="form-grid two">
+            <Field
+              required
+              label="Razão social"
+              value={form.legalName}
+              onChange={(e) => setForm({ ...form, legalName: e.target.value })}
+            />
+            <Field
+              required
+              label="Nome fantasia"
+              value={form.tradeName}
+              onChange={(e) => setForm({ ...form, tradeName: e.target.value })}
+            />
+            <Field
+              required
+              label="CNPJ / CPF"
+              value={form.document}
+              onChange={(e) => setForm({ ...form, document: e.target.value })}
+            />
+            <Field
+              required
+              label="Contato"
+              value={form.contact}
+              onChange={(e) => setForm({ ...form, contact: e.target.value })}
+            />
+            <Field
+              className="span-two"
+              label="E-mail"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+          </div>
+        </SectionCard>
+        <SectionCard
+          title="Endereço"
+          description="Localização apresentada nos documentos emitidos."
+        >
+          <div className="form-grid address">
+            <Field
+              required
+              className="span-two"
+              label="Rua"
+              value={form.street}
+              onChange={(e) => setForm({ ...form, street: e.target.value })}
+            />
+            <Field
+              required
+              label="Número"
+              value={form.number}
+              onChange={(e) => setForm({ ...form, number: e.target.value })}
+            />
+            <Field
+              required
+              label="Bairro"
+              value={form.neighborhood}
+              onChange={(e) =>
+                setForm({ ...form, neighborhood: e.target.value })
+              }
+            />
+            <Field
+              required
+              label="CEP"
+              value={form.cep}
+              onChange={(e) =>
+                setForm({ ...form, cep: formatCep(e.target.value) })
+              }
+            />
+            <Field
+              required
+              label="Cidade"
+              value={form.city}
+              onChange={(e) => setForm({ ...form, city: e.target.value })}
+            />
+            <UfSelect
+              value={form.state}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  state: e.target.value as CompanyInput["state"],
+                })
+              }
+            />
+          </div>
+        </SectionCard>
         {error && <Message kind="error">{error}</Message>}
         {message && <Message kind="success">{message}</Message>}
-        <button className="primary-button" type="submit">
-          <Save size={18} />
-          Salvar empresa
-        </button>
+        <div className="form-submit-row">
+          <span>
+            <Building2 size={17} /> Alterações futuras serão refletidas nos
+            próximos documentos.
+          </span>
+          <AppButton
+            variant="primary"
+            icon={<Save size={18} />}
+            loading={saving}
+            type="submit"
+          >
+            Salvar empresa
+          </AppButton>
+        </div>
       </form>
     </section>
   );

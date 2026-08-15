@@ -4,7 +4,7 @@ import {
   BRAZILIAN_STATES,
   PAYMENT_METHODS,
   RENTAL_PERIODS,
-  USER_ROLES
+  USER_ROLES,
 } from "../domain/types";
 import type {
   CompanySettings,
@@ -18,29 +18,35 @@ import type {
   RentalListItem,
   RentalPeriod,
   RentalStatus,
-  User
+  User,
 } from "../domain/types";
 
 const requiredText = z.string().trim().min(1, "Campo obrigatório.");
 const optionalText = z.string().trim().default("");
 const cpfField = requiredText.refine(isValidCpf, "Informe um CPF válido.");
-const cepField = requiredText.refine((value) => onlyDigits(value).length === 8, "Informe um CEP válido.");
+const cepField = requiredText.refine(
+  (value) => onlyDigits(value).length === 8,
+  "Informe um CEP válido.",
+);
 const optionalCepField = z
   .string()
   .trim()
   .default("")
-  .refine((value) => value === "" || onlyDigits(value).length === 8, "Informe um CEP válido.");
+  .refine(
+    (value) => value === "" || onlyDigits(value).length === 8,
+    "Informe um CEP válido.",
+  );
 
 export const loginSchema = z.object({
   username: requiredText,
-  password: requiredText
+  password: requiredText,
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
 export const userInputSchema = z.object({
   username: requiredText,
   password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres."),
-  role: z.enum(USER_ROLES)
+  role: z.enum(USER_ROLES),
 });
 export type UserInput = z.infer<typeof userInputSchema>;
 
@@ -54,7 +60,7 @@ export const customerInputSchema = z.object({
   cep: cepField,
   city: requiredText,
   state: z.enum(BRAZILIAN_STATES),
-  contact: requiredText
+  contact: requiredText,
 });
 export type CustomerInput = z.infer<typeof customerInputSchema>;
 
@@ -62,7 +68,7 @@ export const equipmentInputSchema = z.object({
   name: requiredText,
   equipmentValueCents: z.number().int().nonnegative(),
   unitIndemnificationValueCents: z.number().int().nonnegative(),
-  stockQuantity: z.number().int().nonnegative()
+  stockQuantity: z.number().int().nonnegative(),
 });
 export type EquipmentInput = z.infer<typeof equipmentInputSchema>;
 
@@ -77,13 +83,13 @@ export const companyInputSchema = z.object({
   city: requiredText,
   state: z.enum(BRAZILIAN_STATES),
   contact: requiredText,
-  email: z.string().trim().email("Informe um e-mail válido.").or(z.literal(""))
+  email: z.string().trim().email("Informe um e-mail válido.").or(z.literal("")),
 });
 export type CompanyInput = z.infer<typeof companyInputSchema>;
 
 export const rentalItemInputSchema = z.object({
   equipmentId: requiredText,
-  quantity: z.number().int().positive("Informe uma quantidade positiva.")
+  quantity: z.number().int().positive("Informe uma quantidade positiva."),
 });
 export type RentalItemInput = z.infer<typeof rentalItemInputSchema>;
 
@@ -92,7 +98,9 @@ export const rentalLaunchSchema = z
     customerId: requiredText,
     period: z.enum(RENTAL_PERIODS),
     startDate: requiredText,
-    items: z.array(rentalItemInputSchema).min(1, "Inclua pelo menos um equipamento."),
+    items: z
+      .array(rentalItemInputSchema)
+      .min(1, "Inclua pelo menos um equipamento."),
     deliveryStreet: optionalText,
     deliveryNeighborhood: optionalText,
     deliveryNumber: optionalText,
@@ -104,7 +112,7 @@ export const rentalLaunchSchema = z
     receiverCpf: z.string().trim().default(""),
     paymentMethod: z.enum(PAYMENT_METHODS),
     installments: z.number().int().positive().nullable(),
-    clientRequestId: z.string().uuid().optional()
+    clientRequestId: z.string().uuid().optional(),
   })
   .superRefine((value, ctx) => {
     if (!value.receiverIsCustomer) {
@@ -112,14 +120,14 @@ export const rentalLaunchSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Informe o nome de quem receberá os equipamentos.",
-          path: ["receiverName"]
+          path: ["receiverName"],
         });
       }
       if (!isValidCpf(value.receiverCpf)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Informe o CPF de quem receberá os equipamentos.",
-          path: ["receiverCpf"]
+          path: ["receiverCpf"],
         });
       }
     }
@@ -128,7 +136,7 @@ export const rentalLaunchSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Informe a quantidade de parcelas do cartão de crédito.",
-        path: ["installments"]
+        path: ["installments"],
       });
     }
   });
@@ -153,6 +161,11 @@ export interface AppInfo {
 export interface A3Api {
   appInfo(): Promise<AppInfo>;
   openExternal(url: string): Promise<void>;
+  minimizeWindow(): Promise<void>;
+  toggleMaximizeWindow(): Promise<boolean>;
+  closeWindow(): Promise<void>;
+  isWindowMaximized(): Promise<boolean>;
+  onWindowMaximizedChanged(listener: (maximized: boolean) => void): () => void;
   login(input: LoginInput): Promise<User>;
   listUsers(): Promise<User[]>;
   createUser(input: UserInput): Promise<User>;
@@ -176,6 +189,11 @@ export interface A3Api {
   printRental(id: string): Promise<void>;
 }
 
-export type EntityKind = "customer" | "equipment" | "rental" | "user" | "company";
+export type EntityKind =
+  | "customer"
+  | "equipment"
+  | "rental"
+  | "user"
+  | "company";
 export type PeriodValue = RentalPeriod;
 export type PaymentValue = PaymentMethod;
