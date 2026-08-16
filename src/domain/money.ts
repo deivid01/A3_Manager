@@ -19,17 +19,88 @@ export function formatCents(value: number): string {
   }).format(value / 100);
 }
 
+export interface RentalMoneyItem {
+  quantity: number;
+  equipmentValueCents: number;
+  unitIndemnificationValueCents: number;
+}
+
+export interface RentalItemMoneyTotals {
+  equipmentSubtotalCents: number;
+  indemnificationSubtotalCents: number;
+  totalCents: number;
+}
+
+export interface RentalMoneyTotals {
+  equipmentTotalCents: number;
+  indemnificationTotalCents: number;
+  grandTotalCents: number;
+}
+
+export function calculateEquipmentSubtotal(
+  quantity: number,
+  equipmentValueCents: number
+): number {
+  assertPositiveQuantity(quantity);
+  assertMoneyCents(equipmentValueCents, "O valor do equipamento deve ser informado em centavos.");
+
+  return quantity * equipmentValueCents;
+}
+
 export function calculateIndemnificationTotal(
   quantity: number,
   unitIndemnificationValueCents: number
 ): number {
+  assertPositiveQuantity(quantity);
+  assertMoneyCents(unitIndemnificationValueCents, "O valor de indenização deve ser informado em centavos.");
+
+  return quantity * unitIndemnificationValueCents;
+}
+
+export function calculateRentalItemTotals(item: RentalMoneyItem): RentalItemMoneyTotals {
+  const equipmentSubtotalCents = calculateEquipmentSubtotal(
+    item.quantity,
+    item.equipmentValueCents
+  );
+  const indemnificationSubtotalCents = calculateIndemnificationTotal(
+    item.quantity,
+    item.unitIndemnificationValueCents
+  );
+
+  return {
+    equipmentSubtotalCents,
+    indemnificationSubtotalCents,
+    totalCents: equipmentSubtotalCents + indemnificationSubtotalCents
+  };
+}
+
+export function calculateRentalMoneyTotals(items: RentalMoneyItem[]): RentalMoneyTotals {
+  return items.reduce<RentalMoneyTotals>(
+    (totals, item) => {
+      const itemTotals = calculateRentalItemTotals(item);
+      return {
+        equipmentTotalCents: totals.equipmentTotalCents + itemTotals.equipmentSubtotalCents,
+        indemnificationTotalCents:
+          totals.indemnificationTotalCents + itemTotals.indemnificationSubtotalCents,
+        grandTotalCents: totals.grandTotalCents + itemTotals.totalCents
+      };
+    },
+    {
+      equipmentTotalCents: 0,
+      indemnificationTotalCents: 0,
+      grandTotalCents: 0
+    }
+  );
+}
+
+function assertPositiveQuantity(quantity: number): void {
   if (!Number.isInteger(quantity) || quantity <= 0) {
     throw new Error("A quantidade deve ser um inteiro positivo.");
   }
+}
 
-  if (!Number.isInteger(unitIndemnificationValueCents) || unitIndemnificationValueCents < 0) {
-    throw new Error("O valor de indenização deve ser informado em centavos.");
+function assertMoneyCents(value: number, message: string): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(message);
   }
-
-  return quantity * unitIndemnificationValueCents;
 }

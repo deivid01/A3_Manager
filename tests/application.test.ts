@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "../src/domain/appError";
+import { calculateRentalMoneyTotals } from "../src/domain/money";
 import { renderRentalDocumentHtml } from "../src/infrastructure/printing/rentalDocument";
 import { createTestService, validCustomer, validEquipment } from "./helpers";
 
@@ -61,6 +62,64 @@ describe("serviços principais do A3 Manager", () => {
     expect(rental.returnDate).toBe("2026-09-14");
     expect(rental.items[0]?.unitIndemnificationValueCents).toBe(20000);
     expect(service.listEquipment("Betoneira")[0]?.stockQuantity).toBe(3);
+  });
+
+  it("calcula total de responsabilidade em locação com três equipamentos", async () => {
+    const { service } = await createTestService();
+    const user = await service.login({ username: "SYSTEM DEV", password: "_int@383" });
+    const customer = service.createCustomer(validCustomer);
+    const betoneira = service.createEquipment({
+      ...validEquipment,
+      name: "Betoneira",
+      equipmentValueCents: 100000,
+      unitIndemnificationValueCents: 20000,
+      stockQuantity: 4
+    });
+    const martelete = service.createEquipment({
+      ...validEquipment,
+      name: "Martelete",
+      equipmentValueCents: 50000,
+      unitIndemnificationValueCents: 10000,
+      stockQuantity: 3
+    });
+    const andaime = service.createEquipment({
+      ...validEquipment,
+      name: "Andaime",
+      equipmentValueCents: 123456,
+      unitIndemnificationValueCents: 7899,
+      stockQuantity: 3
+    });
+
+    const rental = service.launchRental(
+      {
+        customerId: customer.id,
+        period: "MONTHLY",
+        startDate: "2026-08-14",
+        items: [
+          { equipmentId: betoneira.id, quantity: 2 },
+          { equipmentId: martelete.id, quantity: 1 },
+          { equipmentId: andaime.id, quantity: 3 }
+        ],
+        deliveryStreet: "",
+        deliveryNeighborhood: "",
+        deliveryNumber: "",
+        deliveryCep: "",
+        deliveryCity: "",
+        deliveryState: "",
+        receiverIsCustomer: true,
+        receiverName: "",
+        receiverCpf: "",
+        paymentMethod: "PIX",
+        installments: null
+      },
+      user.id
+    );
+
+    expect(calculateRentalMoneyTotals(rental.items)).toEqual({
+      equipmentTotalCents: 620368,
+      indemnificationTotalCents: 73697,
+      grandTotalCents: 694065
+    });
   });
 
   it("não baixa estoque quando a locação falha por quantidade insuficiente", async () => {
@@ -246,7 +305,11 @@ describe("serviços principais do A3 Manager", () => {
     expect(html).toContain("Maria Oliveira");
     expect(html).toContain("Betoneira 400L");
     expect(html).toContain("João Recebedor");
+    expect(html).toContain("Valor total dos equipamentos");
+    expect(html).toContain("Valor total da indenização");
+    expect(html).toContain("TOTAL");
     expect(html).toContain("Termo de responsabilidade");
+    expect(html).not.toContain("Valor da locação");
     expect(html).not.toContain("Nova locação");
   });
 });

@@ -5,6 +5,8 @@ import {
   HardHat,
   LogOut,
   Package,
+  PanelLeftClose,
+  PanelLeftOpen,
   UserCog,
   Users,
 } from "lucide-react";
@@ -13,6 +15,12 @@ import type { User } from "../domain/types";
 import { roleLabels } from "../domain/labels";
 import type { AppInfo } from "../shared/contracts";
 import { WindowTitlebar } from "./components/WindowTitlebar";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from "./components/ui/tooltip";
 import { CompanyView } from "./features/CompanyView";
 import { CustomersView } from "./features/CustomersView";
 import { EquipmentView } from "./features/EquipmentView";
@@ -92,13 +100,15 @@ function AuthenticatedShell({
   onNavigate(view: ViewKey): void;
   onLogout(): void;
 }) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const visibleNav = navItems.filter(
     (item) => !item.adminOnly || currentUser.role === "ADMIN",
   );
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <TooltipProvider delayDuration={180}>
+    <div className={sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
+      <aside className={sidebarCollapsed ? "sidebar collapsed" : "sidebar"}>
         <div className="sidebar-brand">
           <div className="sidebar-logo">
             <img src={`${import.meta.env.BASE_URL}logo-A3.jpg`} alt="A3" />
@@ -107,6 +117,15 @@ function AuthenticatedShell({
             <strong>A3 Manager</strong>
             <span>Gestão de locações</span>
           </div>
+          <button
+            className="sidebar-collapse-button"
+            type="button"
+            title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+            aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+            onClick={() => setSidebarCollapsed((current) => !current)}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
         </div>
 
         <nav aria-label="Navegação principal">
@@ -114,18 +133,22 @@ function AuthenticatedShell({
           {visibleNav.map((item) => {
             const Icon = item.icon;
             return (
-              <button
-                className={
-                  activeView === item.key ? "nav-button active" : "nav-button"
-                }
-                key={item.key}
-                onClick={() => onNavigate(item.key)}
-                title={item.label}
-                type="button"
-              >
-                <Icon size={19} strokeWidth={1.9} />
-                <span>{item.label}</span>
-              </button>
+              <Tooltip key={item.key}>
+                <TooltipTrigger asChild>
+                  <button
+                    className={
+                      activeView === item.key ? "nav-button active" : "nav-button"
+                    }
+                    onClick={() => onNavigate(item.key)}
+                    title={item.label}
+                    type="button"
+                  >
+                    <Icon size={19} strokeWidth={1.9} />
+                    <span>{item.label}</span>
+                  </button>
+                </TooltipTrigger>
+                {sidebarCollapsed && <TooltipContent side="right">{item.label}</TooltipContent>}
+              </Tooltip>
             );
           })}
         </nav>
@@ -140,24 +163,29 @@ function AuthenticatedShell({
             <br />
             Feito por Deivid Peres
           </button>
-          <div className="session-card">
-            <div className="session-avatar">
-              <HardHat size={18} />
-            </div>
-            <div className="session-copy">
-              <strong>{currentUser.username}</strong>
-              <span>{roleLabels[currentUser.role]}</span>
-            </div>
-            <button
-              className="logout-button"
-              onClick={onLogout}
-              title="Sair"
-              aria-label="Sair"
-              type="button"
-            >
-              <LogOut size={18} />
-            </button>
-          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="session-card" title={currentUser.username}>
+                <div className="session-avatar">
+                  <HardHat size={18} />
+                </div>
+                <div className="session-copy">
+                  <strong>{currentUser.username}</strong>
+                  <span>{roleLabels[currentUser.role]}</span>
+                </div>
+                <button
+                  className="logout-button"
+                  onClick={onLogout}
+                  title="Sair"
+                  aria-label="Sair"
+                  type="button"
+                >
+                  <LogOut size={18} />
+                </button>
+              </div>
+            </TooltipTrigger>
+            {sidebarCollapsed && <TooltipContent side="right">{currentUser.username}</TooltipContent>}
+          </Tooltip>
         </div>
       </aside>
 
@@ -170,5 +198,6 @@ function AuthenticatedShell({
         {activeView === "users" && <UsersView />}
       </main>
     </div>
+    </TooltipProvider>
   );
 }

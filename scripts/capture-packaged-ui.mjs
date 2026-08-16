@@ -9,7 +9,7 @@ const executablePath = path.resolve(
   process.argv[2] ?? "release/win-unpacked/A3 Manager.exe",
 );
 const outputDir = path.resolve(
-  process.argv[3] ?? "output/screenshots/after-0.1.4",
+  process.argv[3] ?? "output/screenshots/after-0.1.5",
 );
 const userDataDir = fs.mkdtempSync(
   path.join(os.tmpdir(), "a3-visual-validation-"),
@@ -71,6 +71,11 @@ try {
   await captureMatrix("login");
   await login();
   await waitFor("Boolean(document.querySelector('[data-screen=rentals]'))");
+  await captureMatrix("sidebar-expanded");
+  await toggleSidebar();
+  await captureMatrix("sidebar-collapsed");
+  await setViewport(viewports[0]);
+  await toggleSidebar();
   await captureMatrix("reports-empty");
   await clickButton("Filtrar");
   await waitFor("Boolean(document.querySelector('.filter-panel'))");
@@ -134,7 +139,7 @@ try {
   await captureMatrix("reports-populated");
   await evaluate("document.querySelector('.rental-row .app-button').click()");
   await waitFor("Boolean(document.querySelector('.rental-detail-modal'))");
-  await captureMatrix("rental-details");
+  await captureMatrix("rental-details", ".detail-money-total");
   await wait(3000);
   memoryAfterScreenshots = collectProcessMemory(appProcess.pid);
 
@@ -236,13 +241,13 @@ async function addEquipmentBySearch(search) {
 async function validateReceiverToggleStability() {
   const samples = [];
   for (let index = 0; index < 10; index += 1) {
-    await evaluate("document.querySelector('.switch-row input').click()");
+    await evaluate("document.querySelector('.switch-row [role=switch]').click()");
     await wait(120);
     samples.push(await readRentalLaunchLayoutHealth(`toggle-${index + 1}`));
   }
   return {
     toggles: samples.length,
-    finalChecked: await evaluate("document.querySelector('.switch-row input').checked"),
+    finalChecked: await readReceiverChecked(),
     passed: samples.every(
       (sample) =>
         !sample.horizontalOverflow &&
@@ -256,8 +261,9 @@ async function validateReceiverToggleStability() {
 
 async function setReceiverIsCustomer(value) {
   await evaluate(`(() => {
-    const input = document.querySelector('.switch-row input');
-    if (input.checked !== ${JSON.stringify(value)}) input.click();
+    const control = document.querySelector('.switch-row [role=switch]');
+    const checked = control.getAttribute('aria-checked') === 'true' || control.dataset.state === 'checked';
+    if (checked !== ${JSON.stringify(value)}) control.click();
   })()`);
   await wait(160);
 }
@@ -301,7 +307,10 @@ async function readRentalLaunchLayoutHealth(label) {
     const reviewRect = review.getBoundingClientRect();
     return {
       label: ${JSON.stringify(label)},
-      receiverIsCustomer: document.querySelector('.switch-row input').checked,
+      receiverIsCustomer: (() => {
+        const control = document.querySelector('.switch-row [role=switch]');
+        return control.getAttribute('aria-checked') === 'true' || control.dataset.state === 'checked';
+      })(),
       receiverFieldsVisible: Boolean(document.querySelector('.receiver-fields')),
       horizontalOverflow:
         document.documentElement.scrollWidth > document.documentElement.clientWidth ||
@@ -375,12 +384,7 @@ async function scrollIntoView(selector) {
 
 async function captureMatrix(screen, anchorSelector) {
   for (const viewport of viewports) {
-    await send("Emulation.setDeviceMetricsOverride", {
-      width: viewport.width,
-      height: viewport.height,
-      deviceScaleFactor: 1,
-      mobile: false,
-    });
+    await setViewport(viewport);
     if (anchorSelector) {
       await scrollIntoView(anchorSelector);
     } else {
@@ -397,6 +401,27 @@ async function captureMatrix(screen, anchorSelector) {
     );
     screenshots.push(filename);
   }
+}
+
+async function toggleSidebar() {
+  await evaluate("document.querySelector('.sidebar-collapse-button').click()");
+  await wait(220);
+}
+
+async function setViewport(viewport) {
+  await send("Emulation.setDeviceMetricsOverride", {
+    width: viewport.width,
+    height: viewport.height,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+}
+
+async function readReceiverChecked() {
+  return evaluate(`(() => {
+    const control = document.querySelector('.switch-row [role=switch]');
+    return control.getAttribute('aria-checked') === 'true' || control.dataset.state === 'checked';
+  })()`);
 }
 
 async function findRendererTarget() {

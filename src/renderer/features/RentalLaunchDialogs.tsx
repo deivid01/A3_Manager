@@ -1,10 +1,11 @@
 import { Check, FileDown, PackagePlus, Plus, Printer, Search, Send, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { paymentLabels, periodLabels } from "../../domain/labels";
-import { formatCents } from "../../domain/money";
+import { formatCents, type RentalMoneyTotals } from "../../domain/money";
 import type { CustomerSearchResult, EquipmentSearchResult, RentalDetail } from "../../domain/types";
 import type { RentalLaunchInput } from "../../shared/contracts";
 import { AppButton, EmptyState, Message, Modal } from "../components/Form";
+import { Separator } from "../components/ui/separator";
 
 type RentalDraft = Omit<RentalLaunchInput, "customerId" | "items">;
 
@@ -12,7 +13,7 @@ export function RentalReview({
   customerName,
   form,
   totalQuantity,
-  totalIndemnification,
+  totals,
   returnDate,
   error,
   launching,
@@ -21,7 +22,7 @@ export function RentalReview({
   customerName?: string;
   form: RentalDraft;
   totalQuantity: number;
-  totalIndemnification: number;
+  totals: RentalMoneyTotals;
   returnDate: string;
   error: string;
   launching: boolean;
@@ -40,7 +41,12 @@ export function RentalReview({
         <div><dt>Devolução</dt><dd>{returnDate ? formatDate(returnDate) : "Não calculada"}</dd></div>
         <div><dt>Pagamento</dt><dd>{paymentLabels[form.paymentMethod]}{form.installments ? ` · ${form.installments}x` : ""}</dd></div>
       </dl>
-      <div className="review-total"><span>Indenização total</span><strong>{formatCents(totalIndemnification)}</strong></div>
+      <Separator className="review-separator" />
+      <div className="review-money">
+        <div><span>Valor dos equipamentos</span><strong>{formatCents(totals.equipmentTotalCents)}</strong></div>
+        <div><span>Indenização</span><strong>{formatCents(totals.indemnificationTotalCents)}</strong></div>
+        <div className="review-total"><span>Total</span><strong>{formatCents(totals.grandTotalCents)}</strong></div>
+      </div>
       {error && <Message kind="error">{error}</Message>}
       <AppButton className="launch-button" variant="primary" icon={<Send size={18} />} loading={launching} type="button" onClick={onLaunch}>
         {launching ? "Lançando locação" : "Lançar locação"}

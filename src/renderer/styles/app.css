@@ -4,3 +4,7 @@
 @import "./components.css";
 @import "./features.css";
 @import "./responsive.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

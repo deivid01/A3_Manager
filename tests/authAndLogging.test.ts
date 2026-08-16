@@ -37,6 +37,13 @@ describe("autenticação e logs", () => {
       role: "USER",
     });
     expect(created.username).toBe("JOAO SILVA");
+    expect(
+      await service.createUser({
+        username: "  maria   souza  ",
+        password: "senha123",
+        role: "USER",
+      }),
+    ).toMatchObject({ username: "MARIA SOUZA" });
 
     const logged = await service.login({
       username: "joao silva",

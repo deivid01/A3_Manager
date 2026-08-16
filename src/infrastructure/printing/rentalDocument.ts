@@ -1,5 +1,9 @@
 import { paymentLabels, periodLabels, rentalStatusLabels } from "../../domain/labels";
-import { calculateIndemnificationTotal, formatCents } from "../../domain/money";
+import {
+  calculateRentalItemTotals,
+  calculateRentalMoneyTotals,
+  formatCents
+} from "../../domain/money";
 import type { RentalDetail } from "../../domain/types";
 
 export function renderRentalDocumentHtml(rental: RentalDetail): string {
@@ -7,23 +11,21 @@ export function renderRentalDocumentHtml(rental: RentalDetail): string {
   const customer = rental.customerSnapshot;
   const rows = rental.items
     .map((item) => {
-      const total = calculateIndemnificationTotal(item.quantity, item.unitIndemnificationValueCents);
+      const totals = calculateRentalItemTotals(item);
       return `
         <tr>
-          <td>${escapeHtml(item.nameSnapshot)}</td>
           <td class="numeric">${item.quantity}</td>
+          <td>${escapeHtml(item.nameSnapshot)}</td>
           <td class="numeric">${formatCents(item.equipmentValueCents)}</td>
+          <td class="numeric">${formatCents(totals.equipmentSubtotalCents)}</td>
           <td class="numeric">${formatCents(item.unitIndemnificationValueCents)}</td>
-          <td class="numeric">${formatCents(total)}</td>
+          <td class="numeric">${formatCents(totals.indemnificationSubtotalCents)}</td>
+          <td class="numeric">${formatCents(totals.totalCents)}</td>
         </tr>
       `;
     })
     .join("");
-  const totalIndemnification = rental.items.reduce(
-    (total, item) =>
-      total + calculateIndemnificationTotal(item.quantity, item.unitIndemnificationValueCents),
-    0
-  );
+  const totals = calculateRentalMoneyTotals(rental.items);
 
   return `<!doctype html>
     <html lang="pt-BR">
@@ -59,10 +61,12 @@ export function renderRentalDocumentHtml(rental: RentalDetail): string {
           }
           table { border-collapse: collapse; margin-top: 8px; width: 100%; }
           thead { display: table-header-group; }
-          tfoot { display: table-footer-group; }
+          tfoot { display: table-row-group; }
           tr { break-inside: avoid; page-break-inside: avoid; }
-          th, td { border: 1px solid #d7d7d7; padding: 6px; text-align: left; }
+          th, td { border: 1px solid #d7d7d7; padding: 5px; text-align: left; }
           th { background: #f5f5f5; }
+          tfoot th { background: #fbfaf4; }
+          .grand-total th { background: #fff0c2; font-size: 13px; }
           .numeric { text-align: right; white-space: nowrap; }
           .grid { display: grid; gap: 6px 20px; grid-template-columns: repeat(2, 1fr); margin-top: 8px; }
           .muted { color: #555; }
@@ -124,18 +128,28 @@ export function renderRentalDocumentHtml(rental: RentalDetail): string {
           <table>
             <thead>
               <tr>
-                <th>Equipamento</th>
                 <th class="numeric">Qtd.</th>
-                <th class="numeric">Valor do equipamento</th>
+                <th>Equipamento</th>
+                <th class="numeric">Valor unitário do equipamento</th>
+                <th class="numeric">Subtotal do equipamento</th>
                 <th class="numeric">Indenização unitária</th>
-                <th class="numeric">Indenização total</th>
+                <th class="numeric">Subtotal da indenização</th>
+                <th class="numeric">Total do item</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
             <tfoot>
               <tr>
-                <th colspan="4" class="numeric">Total de indenização</th>
-                <th class="numeric">${formatCents(totalIndemnification)}</th>
+                <th colspan="6" class="numeric">Valor total dos equipamentos</th>
+                <th class="numeric">${formatCents(totals.equipmentTotalCents)}</th>
+              </tr>
+              <tr>
+                <th colspan="6" class="numeric">Valor total da indenização</th>
+                <th class="numeric">${formatCents(totals.indemnificationTotalCents)}</th>
+              </tr>
+              <tr class="grand-total">
+                <th colspan="6" class="numeric">TOTAL</th>
+                <th class="numeric">${formatCents(totals.grandTotalCents)}</th>
               </tr>
             </tfoot>
           </table>

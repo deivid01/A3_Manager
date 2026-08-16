@@ -1,6 +1,5 @@
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 import {
-  useEffect,
   type ButtonHTMLAttributes,
   type ChangeEventHandler,
   type InputHTMLAttributes,
@@ -8,6 +7,21 @@ import {
   type SelectHTMLAttributes,
 } from "react";
 import { BRAZILIAN_STATES } from "../../domain/types";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader } from "./ui/card";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 
 interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -27,11 +41,11 @@ export function Field({
   ...props
 }: FieldProps) {
   return (
-    <label className={`field ${className}`}>
+    <Label className={`field ${className}`}>
       <span className="field-label">{label}</span>
       <span className="field-control">
         {leadingIcon && <span className="field-leading">{leadingIcon}</span>}
-        <input
+        <Input
           className={leadingIcon ? "has-leading" : ""}
           aria-invalid={Boolean(error)}
           {...props}
@@ -45,7 +59,7 @@ export function Field({
       ) : (
         hint && <small className="field-hint">{hint}</small>
       )}
-    </label>
+    </Label>
   );
 }
 
@@ -62,11 +76,11 @@ export function SelectField({
   ...props
 }: SelectFieldProps) {
   return (
-    <label className="field">
+    <Label className="field">
       <span className="field-label">{label}</span>
       <select {...props}>{children}</select>
       {hint && <small className="field-hint">{hint}</small>}
-    </label>
+    </Label>
   );
 }
 
@@ -109,14 +123,15 @@ export function AppButton({
   ...props
 }: AppButtonProps) {
   return (
-    <button
+    <Button
       className={`app-button ${variant} ${className}`}
       disabled={disabled || loading}
+      variant={variant}
       {...props}
     >
       {loading ? <span className="loading-spinner" aria-hidden="true" /> : icon}
       <span>{children}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -126,9 +141,9 @@ export function IconButton({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button className={`icon-button ${className}`} {...props}>
+    <Button className={`icon-button ${className}`} size="icon" variant="icon" {...props}>
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -231,18 +246,18 @@ export function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <section className={`section-card ${className}`}>
+    <Card className={`section-card ${className}`}>
       {(title || action) && (
-        <header className="section-card-header">
+        <CardHeader className="section-card-header">
           <div>
             {title && <h2>{title}</h2>}
             {description && <p>{description}</p>}
           </div>
           {action}
-        </header>
+        </CardHeader>
       )}
-      {children}
-    </section>
+      <CardContent className="contents">{children}</CardContent>
+    </Card>
   );
 }
 
@@ -253,7 +268,7 @@ export function StatusBadge({
   kind: "success" | "warning" | "danger" | "neutral";
   children: ReactNode;
 }) {
-  return <span className={`status-badge ${kind}`}>{children}</span>;
+  return <Badge className={`status-badge ${kind}`} variant={kind}>{children}</Badge>;
 }
 
 export function Modal({
@@ -273,43 +288,24 @@ export function Modal({
   wide?: boolean;
   className?: string;
 }) {
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) =>
-      event.key === "Escape" && onClose();
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
-
   return (
-    <div
-      className="modal-backdrop"
-      role="presentation"
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
-    >
-      <section
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
         className={`modal ${wide ? "wide" : ""} ${className}`}
-        role="dialog"
-        aria-modal="true"
+        wide={wide}
         aria-label={title}
       >
-        <header className="modal-header">
+        <DialogHeader className="modal-header">
           <div>
-            <h2>{title}</h2>
-            {description && <p>{description}</p>}
+            <DialogTitle asChild><h2>{title}</h2></DialogTitle>
+            {description && <DialogDescription asChild><p>{description}</p></DialogDescription>}
           </div>
-          <IconButton
-            type="button"
-            title="Fechar"
-            aria-label="Fechar"
-            onClick={onClose}
-          >
-            <X size={18} />
-          </IconButton>
-        </header>
-        <div className="modal-body">{children}</div>
-        {footer && <footer className="modal-footer">{footer}</footer>}
-      </section>
-    </div>
+          <DialogCloseButton onClick={onClose} />
+        </DialogHeader>
+        <DialogBody className="modal-body">{children}</DialogBody>
+        {footer && <DialogFooter className="modal-footer">{footer}</DialogFooter>}
+      </DialogContent>
+    </Dialog>
   );
 }
 

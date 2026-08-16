@@ -2,11 +2,16 @@ import { CalendarDays, Check, CreditCard, Minus, PackagePlus, Plus, Search, Tras
 import { useMemo, useState } from "react";
 import { calculateReturnDate } from "../../domain/dateRules";
 import { paymentLabels, periodLabels } from "../../domain/labels";
-import { formatCents } from "../../domain/money";
+import {
+  calculateRentalItemTotals,
+  calculateRentalMoneyTotals,
+  formatCents
+} from "../../domain/money";
 import { formatCep, formatCpf } from "../../domain/normalization";
 import { PAYMENT_METHODS, RENTAL_PERIODS, type CustomerSearchResult, type EquipmentSearchResult, type RentalDetail } from "../../domain/types";
 import type { RentalLaunchInput } from "../../shared/contracts";
 import { AppButton, EmptyState, Field, IconButton, PageHeader, SectionCard, SelectField, UfSelect } from "../components/Form";
+import { Switch } from "../components/ui/switch";
 import { CustomerSearchModal, EquipmentSearchModal, RentalReview, RentalSuccessModal } from "./RentalLaunchDialogs";
 
 interface SelectedItem extends EquipmentSearchResult { quantity: number; }
@@ -46,10 +51,7 @@ export function RentalLaunchView() {
     catch { return ""; }
   }, [form.startDate, form.period]);
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-  const totalIndemnification = items.reduce(
-    (sum, item) => sum + item.quantity * item.unitIndemnificationValueCents,
-    0,
-  );
+  const rentalTotals = calculateRentalMoneyTotals(items);
 
   async function launch() {
     if (launching) return;
@@ -110,7 +112,7 @@ export function RentalLaunchView() {
           customerName={customer?.name}
           form={form}
           totalQuantity={totalQuantity}
-          totalIndemnification={totalIndemnification}
+          totals={rentalTotals}
           returnDate={returnDate}
           error={error}
           launching={launching}
@@ -177,23 +179,50 @@ function EquipmentSection({ items, onSearch, onQuantityChange, onRemove }: {
       ) : (
         <div className="selected-equipment-list">
           {items.map((item) => (
-            <div className="selected-equipment" key={item.id}>
-              <div className="equipment-main">
-                <strong>{item.name}</strong>
-                <span>{item.stockQuantity} disponível{item.stockQuantity === 1 ? "" : "is"} · {formatCents(item.unitIndemnificationValueCents)} por unidade</span>
-              </div>
-              <div className="quantity-stepper" aria-label={`Quantidade de ${item.name}`}>
-                <IconButton type="button" title="Diminuir quantidade" onClick={() => onQuantityChange(item.id, -1)} disabled={item.quantity <= 1}><Minus size={15} /></IconButton>
-                <strong>{item.quantity}</strong>
-                <IconButton type="button" title="Aumentar quantidade" onClick={() => onQuantityChange(item.id, 1)} disabled={item.quantity >= item.stockQuantity}><Plus size={15} /></IconButton>
-              </div>
-              <strong className="equipment-total">{formatCents(item.quantity * item.unitIndemnificationValueCents)}</strong>
-              <IconButton className="danger" type="button" title="Remover equipamento" onClick={() => onRemove(item.id)}><Trash2 size={17} /></IconButton>
-            </div>
+            <SelectedEquipmentItem
+              item={item}
+              key={item.id}
+              onQuantityChange={onQuantityChange}
+              onRemove={onRemove}
+            />
           ))}
         </div>
       )}
     </SectionCard>
+  );
+}
+
+function SelectedEquipmentItem({
+  item,
+  onQuantityChange,
+  onRemove,
+}: {
+  item: SelectedItem;
+  onQuantityChange(id: string, delta: number): void;
+  onRemove(id: string): void;
+}) {
+  const totals = calculateRentalItemTotals(item);
+
+  return (
+    <div className="selected-equipment">
+      <div className="equipment-main">
+        <strong>{item.name}</strong>
+        <span>{item.stockQuantity} disponível{item.stockQuantity === 1 ? "" : "is"}</span>
+      </div>
+      <div className="quantity-stepper" aria-label={`Quantidade de ${item.name}`}>
+        <IconButton type="button" title="Diminuir quantidade" onClick={() => onQuantityChange(item.id, -1)} disabled={item.quantity <= 1}><Minus size={15} /></IconButton>
+        <strong>{item.quantity}</strong>
+        <IconButton type="button" title="Aumentar quantidade" onClick={() => onQuantityChange(item.id, 1)} disabled={item.quantity >= item.stockQuantity}><Plus size={15} /></IconButton>
+      </div>
+      <dl className="equipment-money-grid">
+        <div><dt>Valor unitário do equipamento</dt><dd>{formatCents(item.equipmentValueCents)}</dd></div>
+        <div><dt>Subtotal do equipamento</dt><dd>{formatCents(totals.equipmentSubtotalCents)}</dd></div>
+        <div><dt>Indenização unitária</dt><dd>{formatCents(item.unitIndemnificationValueCents)}</dd></div>
+        <div><dt>Subtotal da indenização</dt><dd>{formatCents(totals.indemnificationSubtotalCents)}</dd></div>
+        <div className="item-grand-total"><dt>Total do item</dt><dd>{formatCents(totals.totalCents)}</dd></div>
+      </dl>
+      <IconButton className="danger" type="button" title="Remover equipamento" onClick={() => onRemove(item.id)}><Trash2 size={17} /></IconButton>
+    </div>
   );
 }
 
@@ -247,18 +276,15 @@ function DeliverySection({ form, onChange }: { form: RentalDraft; onChange(form:
         <Field label="Cidade" value={form.deliveryCity} onChange={(event) => onChange({ ...form, deliveryCity: event.target.value })} />
         <UfSelect allowEmpty value={form.deliveryState} onChange={(event) => onChange({ ...form, deliveryState: event.target.value as RentalLaunchInput["deliveryState"] })} />
       </div>
-      <label className="switch-row">
-        <input
-          aria-checked={form.receiverIsCustomer}
+      <div className="switch-row">
+        <Switch
           checked={form.receiverIsCustomer}
-          role="switch"
-          type="checkbox"
-          onChange={(event) => onChange({ ...form, receiverIsCustomer: event.target.checked })}
+          aria-label="O cliente receberá os equipamentos?"
+          onCheckedChange={(checked) => onChange({ ...form, receiverIsCustomer: checked })}
         />
-        <span className="switch-control" />
         <div><strong>O cliente receberá os equipamentos?</strong></div>
         <span className={form.receiverIsCustomer ? "switch-state yes" : "switch-state no"}>{receiverStateLabel}</span>
-      </label>
+      </div>
       {!form.receiverIsCustomer && (
         <div className="form-grid two receiver-fields">
           <Field label="Nome do recebedor" value={form.receiverName} onChange={(event) => onChange({ ...form, receiverName: event.target.value })} />
