@@ -15,6 +15,10 @@ export function normalizeUsername(value: string): string {
   return normalizeSearch(value);
 }
 
+export function normalizeUsernameDraft(value: string): string {
+  return value.toUpperCase();
+}
+
 export function formatCpf(value: string): string {
   const digits = onlyDigits(value).slice(0, 11);
   return digits

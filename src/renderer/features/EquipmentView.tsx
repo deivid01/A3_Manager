@@ -125,9 +125,8 @@ export function EquipmentView() {
   return (
     <section className="view" data-screen="equipment">
       <PageHeader
-        eyebrow="Catálogo e estoque"
         title="Equipamentos"
-        description="Acompanhe disponibilidade, patrimônio e valores de indenização."
+        description="Estoque, patrimônio e indenização por unidade."
         action={
           <AppButton
             variant="primary"

@@ -1,15 +1,47 @@
+@font-face {
+  font-family: "Manrope";
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+  src: url("@fontsource/manrope/files/manrope-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Manrope";
+  font-display: swap;
+  font-style: normal;
+  font-weight: 500;
+  src: url("@fontsource/manrope/files/manrope-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Manrope";
+  font-display: swap;
+  font-style: normal;
+  font-weight: 600;
+  src: url("@fontsource/manrope/files/manrope-latin-600-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Manrope";
+  font-display: swap;
+  font-style: normal;
+  font-weight: 700;
+  src: url("@fontsource/manrope/files/manrope-latin-700-normal.woff2") format("woff2");
+}
+
 :root {
   color: #20231f;
   background: #171817;
-  font-family: "Segoe UI", Inter, Arial, sans-serif;
+  font-family: "Manrope", "Segoe UI", Arial, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 
-  --background-primary: #f4f3ef;
-  --background-secondary: #ebeae5;
+  --background-primary: #f3f2ec;
+  --background-secondary: #e8e7df;
   --surface-primary: #ffffff;
-  --surface-elevated: #ffffff;
-  --surface-hover: #f8f6f0;
+  --surface-elevated: #fffefa;
+  --surface-hover: #f7f4ec;
   --surface-dark: #1c1e1c;
   --surface-dark-elevated: #262826;
   --text-primary: #20231f;
@@ -41,9 +73,10 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
-  --shadow-sm: 0 1px 2px rgba(20, 23, 20, 0.06);
-  --shadow-md: 0 10px 30px rgba(20, 23, 20, 0.09), 0 2px 6px rgba(20, 23, 20, 0.05);
-  --shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.28);
+  --shadow-sm: 0 2px 4px rgba(20, 23, 20, 0.06);
+  --shadow-md: 0 14px 34px rgba(20, 23, 20, 0.1), 0 3px 8px rgba(20, 23, 20, 0.06);
+  --shadow-lg: 0 30px 74px rgba(0, 0, 0, 0.3), 0 8px 22px rgba(0, 0, 0, 0.18);
+  --shadow-card: 0 16px 34px rgba(28, 31, 28, 0.08), 0 2px 7px rgba(28, 31, 28, 0.05);
   --transition-fast: 140ms ease;
   --transition-normal: 190ms ease;
 }

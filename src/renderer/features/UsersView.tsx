@@ -1,7 +1,10 @@
 import { ShieldCheck, UserPlus, UsersRound } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { roleLabels } from "../../domain/labels";
-import { normalizeUsername } from "../../domain/normalization";
+import {
+  normalizeUsername,
+  normalizeUsernameDraft,
+} from "../../domain/normalization";
 import type { User } from "../../domain/types";
 import type { UserInput } from "../../shared/contracts";
 import {
@@ -43,8 +46,13 @@ export function UsersView() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
+    const normalizedForm = {
+      ...form,
+      username: normalizeUsername(form.username),
+    };
+    setForm(normalizedForm);
     try {
-      await window.a3.createUser(form);
+      await window.a3.createUser(normalizedForm);
       setForm(emptyForm);
       setFormOpen(false);
       setMessage("Usuário criado com sucesso.");
@@ -61,9 +69,8 @@ export function UsersView() {
   return (
     <section className="view view-medium" data-screen="users">
       <PageHeader
-        eyebrow="Controle de acesso"
         title="Usuários"
-        description="Gerencie operadores e os níveis de acesso ao A3 Manager."
+        description="Operadores cadastrados e perfil de acesso."
         action={
           <AppButton
             variant="primary"
@@ -152,10 +159,16 @@ export function UsersView() {
               label="Usuário"
               placeholder="NOME DO USUÁRIO"
               value={form.username}
+              onBlur={() =>
+                setForm((current) => ({
+                  ...current,
+                  username: normalizeUsername(current.username),
+                }))
+              }
               onChange={(e) =>
                 setForm({
                   ...form,
-                  username: normalizeUsername(e.target.value),
+                  username: normalizeUsernameDraft(e.target.value),
                 })
               }
             />

@@ -122,9 +122,8 @@ export function CustomersView() {
   return (
     <section className="view" data-screen="customers">
       <PageHeader
-        eyebrow="Cadastros"
         title="Clientes"
-        description="Organize os locatários e mantenha os dados de contato atualizados."
+        description="Locatários, CPF, contato e endereço."
         action={
           <AppButton
             variant="primary"

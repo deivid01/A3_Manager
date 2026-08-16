@@ -110,7 +110,7 @@ function AuthenticatedShell({
         </div>
 
         <nav aria-label="Navegação principal">
-          <span className="nav-label">Workspace</span>
+          <span className="nav-label">Menu</span>
           {visibleNav.map((item) => {
             const Icon = item.icon;
             return (

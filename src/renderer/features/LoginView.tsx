@@ -1,6 +1,9 @@
 import { Eye, EyeOff, LockKeyhole, LogIn, UserRound } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { normalizeUsername } from "../../domain/normalization";
+import {
+  normalizeUsername,
+  normalizeUsernameDraft,
+} from "../../domain/normalization";
 import type { User } from "../../domain/types";
 import type { AppInfo } from "../../shared/contracts";
 import { AppButton, Field, IconButton, Message } from "../components/Form";
@@ -23,8 +26,10 @@ export function LoginView({
     if (loading) return;
     setLoading(true);
     setError("");
+    const usernameNormalized = normalizeUsername(username);
+    setUsername(usernameNormalized);
     try {
-      onLogin(await window.a3.login({ username, password }));
+      onLogin(await window.a3.login({ username: usernameNormalized, password }));
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Não foi possível entrar.",
@@ -36,11 +41,6 @@ export function LoginView({
 
   return (
     <main className="login-screen">
-      <div className="login-brand-field" aria-hidden="true">
-        <span>A3</span>
-        <small>LOCAÇÃO</small>
-      </div>
-
       <section className="login-panel">
         <header className="login-header">
           <div className="login-logo-stage">
@@ -49,9 +49,7 @@ export function LoginView({
               alt="A3 Locação"
             />
           </div>
-          <span className="eyebrow">Acesso operacional</span>
           <h1>A3 Manager</h1>
-          <p>Locações, equipamentos e estoque em um só ambiente.</p>
         </header>
 
         <form onSubmit={submit} className="login-form">
@@ -62,8 +60,9 @@ export function LoginView({
             placeholder="Digite seu usuário"
             leadingIcon={<UserRound size={18} />}
             value={username}
+            onBlur={() => setUsername((value) => normalizeUsername(value))}
             onChange={(event) =>
-              setUsername(normalizeUsername(event.target.value))
+              setUsername(normalizeUsernameDraft(event.target.value))
             }
           />
           <Field
@@ -90,13 +89,13 @@ export function LoginView({
           {error && <Message kind="error">{error}</Message>}
           <AppButton
             className="login-submit"
-            disabled={!username || !password}
+            disabled={!normalizeUsername(username) || !password}
             icon={<LogIn size={18} />}
             loading={loading}
             type="submit"
             variant="primary"
           >
-            {loading ? "Verificando acesso" : "Entrar no A3 Manager"}
+            {loading ? "Verificando acesso" : "Entrar"}
           </AppButton>
         </form>
 

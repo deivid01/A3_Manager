@@ -81,9 +81,8 @@ export function CompanyView() {
   return (
     <section className="view view-medium" data-screen="company">
       <PageHeader
-        eyebrow="Configurações"
         title="Empresa"
-        description="Dados oficiais usados nos contratos, comprovantes e PDFs."
+        description="Dados usados nos contratos e PDFs."
       />
       <form className="company-form" onSubmit={submit}>
         <SectionCard

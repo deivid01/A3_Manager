@@ -85,9 +85,8 @@ export function RentalsView() {
   return (
     <section className="view" data-screen="rentals">
       <PageHeader
-        eyebrow="Visão operacional"
         title="Relatórios"
-        description="Consulte locações em andamento, devoluções e históricos."
+        description="Locações em andamento, devoluções e histórico."
         action={
           <AppButton
             variant={filtersOpen ? "secondary" : "primary"}

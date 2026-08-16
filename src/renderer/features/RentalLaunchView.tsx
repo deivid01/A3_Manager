@@ -92,9 +92,7 @@ export function RentalLaunchView() {
   return (
     <section className="view" data-screen="rental-launch">
       <PageHeader
-        eyebrow="Operação"
         title="Nova locação"
-        description="Monte o pedido, confira os dados e faça a baixa de estoque com segurança."
       />
       <div className="rental-launch-layout">
         <div className="rental-flow">
@@ -237,8 +235,10 @@ function PeriodAndPaymentSection({ form, returnDate, onChange }: { form: RentalD
 }
 
 function DeliverySection({ form, onChange }: { form: RentalDraft; onChange(form: RentalDraft): void }) {
+  const receiverStateLabel = form.receiverIsCustomer ? "Sim" : "Não";
+
   return (
-    <SectionCard title="4. Entrega e recebedor" description="Informe o destino dos equipamentos e quem fará o recebimento.">
+    <SectionCard title="4. Entrega e recebedor">
       <div className="form-grid address">
         <Field className="span-two" label="Rua" value={form.deliveryStreet} onChange={(event) => onChange({ ...form, deliveryStreet: event.target.value })} />
         <Field label="Número" value={form.deliveryNumber} onChange={(event) => onChange({ ...form, deliveryNumber: event.target.value })} />
@@ -248,9 +248,16 @@ function DeliverySection({ form, onChange }: { form: RentalDraft; onChange(form:
         <UfSelect allowEmpty value={form.deliveryState} onChange={(event) => onChange({ ...form, deliveryState: event.target.value as RentalLaunchInput["deliveryState"] })} />
       </div>
       <label className="switch-row">
-        <input checked={form.receiverIsCustomer} type="checkbox" onChange={(event) => onChange({ ...form, receiverIsCustomer: event.target.checked })} />
+        <input
+          aria-checked={form.receiverIsCustomer}
+          checked={form.receiverIsCustomer}
+          role="switch"
+          type="checkbox"
+          onChange={(event) => onChange({ ...form, receiverIsCustomer: event.target.checked })}
+        />
         <span className="switch-control" />
-        <div><strong>O cliente receberá os equipamentos</strong><span>Desative para informar outra pessoa responsável.</span></div>
+        <div><strong>O cliente receberá os equipamentos?</strong></div>
+        <span className={form.receiverIsCustomer ? "switch-state yes" : "switch-state no"}>{receiverStateLabel}</span>
       </label>
       {!form.receiverIsCustomer && (
         <div className="form-grid two receiver-fields">

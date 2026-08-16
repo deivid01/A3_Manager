@@ -9,7 +9,7 @@ const executablePath = path.resolve(
   process.argv[2] ?? "release/win-unpacked/A3 Manager.exe",
 );
 const outputDir = path.resolve(
-  process.argv[3] ?? "output/screenshots/after-0.1.2",
+  process.argv[3] ?? "output/screenshots/after-0.1.4",
 );
 const userDataDir = fs.mkdtempSync(
   path.join(os.tmpdir(), "a3-visual-validation-"),
@@ -37,6 +37,7 @@ let nextId = 1;
 const screenshots = [];
 let windowControls;
 let memoryAfterScreenshots;
+let receiverToggleAudit;
 
 try {
   const target = await findRendererTarget();
@@ -111,7 +112,16 @@ try {
   );
   await captureMatrix("rental-launch");
   await prepareRentalSelections();
-  await captureMatrix("rental-launch-selected");
+  await captureMatrix("rental-launch-customer-receives");
+  await addEquipmentBySearch("Betoneira");
+  await captureMatrix("rental-launch-multiple-items");
+  receiverToggleAudit = await validateReceiverToggleStability();
+  await setReceiverIsCustomer(false);
+  await setReceiverFields("Mariana Souza", "390.533.447-05");
+  await captureMatrix("rental-launch-receiver-other", ".switch-row");
+  await setCreditPayment();
+  await captureMatrix("rental-launch-credit", ".choice-grid.payments");
+  await setReceiverIsCustomer(true);
   await clickButton("Lançar locação");
   await waitFor("Boolean(document.querySelector('.rental-success-modal'))");
   await captureMatrix("rental-success");
@@ -133,6 +143,7 @@ try {
     outputDir,
     userDataDir,
     windowControls,
+    receiverToggleAudit,
     memoryAfterScreenshots,
     screenshots,
   };
@@ -202,19 +213,122 @@ async function prepareRentalSelections() {
     "document.querySelector('.customer-search-modal .search-results button').click()",
   );
 
-  await clickButton("Adicionar equipamento");
-  await waitFor("Boolean(document.querySelector('.equipment-search-modal'))");
-  await setInputValue(".equipment-search-modal input", "Compactador");
-  await waitFor(
-    "document.querySelectorAll('.equipment-search-modal .search-results button').length > 0",
-  );
-  await captureMatrix("equipment-search");
-  await evaluate(
-    "document.querySelector('.equipment-search-modal .search-results button').click()",
-  );
+  await addEquipmentBySearch("Compactador");
   await waitFor(
     "document.querySelectorAll('.selected-equipment').length === 1",
   );
+}
+
+async function addEquipmentBySearch(search) {
+  await clickButton("Adicionar equipamento");
+  await waitFor("Boolean(document.querySelector('.equipment-search-modal'))");
+  await setInputValue(".equipment-search-modal input", search);
+  await waitFor(
+    "document.querySelectorAll('.equipment-search-modal .search-results button').length > 0",
+  );
+  await captureMatrix(`equipment-search-${slug(search)}`);
+  await evaluate(
+    "document.querySelector('.equipment-search-modal .search-results button').click()",
+  );
+  await wait(160);
+}
+
+async function validateReceiverToggleStability() {
+  const samples = [];
+  for (let index = 0; index < 10; index += 1) {
+    await evaluate("document.querySelector('.switch-row input').click()");
+    await wait(120);
+    samples.push(await readRentalLaunchLayoutHealth(`toggle-${index + 1}`));
+  }
+  return {
+    toggles: samples.length,
+    finalChecked: await evaluate("document.querySelector('.switch-row input').checked"),
+    passed: samples.every(
+      (sample) =>
+        !sample.horizontalOverflow &&
+        sample.viewHasHeight &&
+        sample.layoutInsideViewport &&
+        sample.reviewInsideContainer,
+    ),
+    samples,
+  };
+}
+
+async function setReceiverIsCustomer(value) {
+  await evaluate(`(() => {
+    const input = document.querySelector('.switch-row input');
+    if (input.checked !== ${JSON.stringify(value)}) input.click();
+  })()`);
+  await wait(160);
+}
+
+async function setReceiverFields(name, cpf) {
+  await evaluate(`(() => {
+    const inputs = document.querySelectorAll('.receiver-fields input');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setter.call(inputs[0], ${JSON.stringify(name)});
+    inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+    setter.call(inputs[1], ${JSON.stringify(cpf)});
+    inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+  })()`);
+}
+
+async function setCreditPayment() {
+  await evaluate(`(() => {
+    const button = [...document.querySelectorAll('.choice-grid.payments .choice-button')][0];
+    if (!button) throw new Error('Forma de pagamento crÃ©dito nÃ£o encontrada');
+    button.click();
+  })()`);
+  await wait(120);
+  await evaluate(`(() => {
+    const select = [...document.querySelectorAll('select')].find((item) =>
+      [...item.options].some((option) => option.value === '2')
+    );
+    if (!select) throw new Error('Seletor de parcelas nÃ£o encontrado');
+    select.value = '2';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  })()`);
+  await wait(120);
+}
+
+async function readRentalLaunchLayoutHealth(label) {
+  return evaluate(`(() => {
+    const view = document.querySelector('[data-screen=rental-launch]');
+    const layout = document.querySelector('.rental-launch-layout');
+    const review = document.querySelector('.rental-review');
+    const viewRect = view.getBoundingClientRect();
+    const layoutRect = layout.getBoundingClientRect();
+    const reviewRect = review.getBoundingClientRect();
+    return {
+      label: ${JSON.stringify(label)},
+      receiverIsCustomer: document.querySelector('.switch-row input').checked,
+      receiverFieldsVisible: Boolean(document.querySelector('.receiver-fields')),
+      horizontalOverflow:
+        document.documentElement.scrollWidth > document.documentElement.clientWidth ||
+        view.scrollWidth > view.clientWidth,
+      viewHasHeight: view.clientHeight > 0,
+      layoutInsideViewport: layoutRect.right <= window.innerWidth + 1 && layoutRect.left >= -1,
+      reviewInsideContainer:
+        reviewRect.left >= viewRect.left - 1 &&
+        reviewRect.right <= viewRect.right + 1 &&
+        reviewRect.width > 0,
+      view: {
+        clientWidth: view.clientWidth,
+        scrollWidth: view.scrollWidth,
+        clientHeight: view.clientHeight,
+        scrollHeight: view.scrollHeight,
+      },
+    };
+  })()`);
+}
+
+function slug(value) {
+  return value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }
 
 async function navigate(label) {
@@ -250,7 +364,16 @@ async function setInputValue(selector, value) {
   })()`);
 }
 
-async function captureMatrix(screen) {
+async function scrollIntoView(selector) {
+  await evaluate(`(() => {
+    const target = document.querySelector(${JSON.stringify(selector)});
+    if (!target) throw new Error('Elemento nÃ£o encontrado para rolagem: ${selector}');
+    target.scrollIntoView({ block: 'center', inline: 'nearest' });
+  })()`);
+  await wait(180);
+}
+
+async function captureMatrix(screen, anchorSelector) {
   for (const viewport of viewports) {
     await send("Emulation.setDeviceMetricsOverride", {
       width: viewport.width,
@@ -258,7 +381,11 @@ async function captureMatrix(screen) {
       deviceScaleFactor: 1,
       mobile: false,
     });
-    await wait(180);
+    if (anchorSelector) {
+      await scrollIntoView(anchorSelector);
+    } else {
+      await wait(180);
+    }
     const response = await send("Page.captureScreenshot", {
       format: "png",
       captureBeyondViewport: false,

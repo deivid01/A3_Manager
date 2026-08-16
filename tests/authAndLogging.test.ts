@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { verifyPassword } from "../src/application/security";
+import { normalizeUsernameDraft } from "../src/domain/normalization";
 import { sanitizeLogMessage } from "../src/infrastructure/logging/FileLogger";
 import { createTestService } from "./helpers";
 
@@ -21,6 +22,34 @@ describe("autenticação e logs", () => {
 
     await expect(
       service.createUser({ username: " OPERADOR ", password: "outrasenha", role: "USER" })
+    ).rejects.toMatchObject({ code: "DUPLICATE" });
+  });
+
+  it("preserva espaços durante digitação e normaliza usuário com nome composto no envio", async () => {
+    const { service } = await createTestService();
+
+    expect(normalizeUsernameDraft("system ")).toBe("SYSTEM ");
+    expect(normalizeUsernameDraft("joao silva")).toBe("JOAO SILVA");
+
+    const created = await service.createUser({
+      username: "  joao   silva  ",
+      password: "senha123",
+      role: "USER",
+    });
+    expect(created.username).toBe("JOAO SILVA");
+
+    const logged = await service.login({
+      username: "joao silva",
+      password: "senha123",
+    });
+    expect(logged.username).toBe("JOAO SILVA");
+
+    await expect(
+      service.createUser({
+        username: "JOAO SILVA",
+        password: "outrasenha",
+        role: "USER",
+      }),
     ).rejects.toMatchObject({ code: "DUPLICATE" });
   });
 
