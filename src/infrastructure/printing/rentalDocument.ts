@@ -5,8 +5,13 @@ import {
   formatCents
 } from "../../domain/money";
 import type { RentalDetail } from "../../domain/types";
+import type { RentalPrintLayoutMode } from "./printLayoutStrategy";
+import { RESPONSIBILITY_TERM_TEXT } from "./responsibilityTerm";
 
-export function renderRentalDocumentHtml(rental: RentalDetail): string {
+export function renderRentalDocumentHtml(
+  rental: RentalDetail,
+  layoutMode: RentalPrintLayoutMode = "NORMAL",
+): string {
   const company = rental.companySnapshot;
   const customer = rental.customerSnapshot;
   const rows = rental.items
@@ -34,28 +39,45 @@ export function renderRentalDocumentHtml(rental: RentalDetail): string {
         <title>Locação ${escapeHtml(rental.code)}</title>
         <style>
           * { box-sizing: border-box; }
+          :root {
+            --page-margin: 12mm;
+            --body-font-size: 12px;
+            --body-line-height: 1.42;
+            --section-gap: 16px;
+            --table-padding: 4.5px;
+            --signature-gap: 34px;
+          }
+          body.print-COMPACT {
+            --page-margin: 10mm;
+            --body-font-size: 11.3px;
+            --body-line-height: 1.34;
+            --section-gap: 12px;
+            --table-padding: 3.5px;
+            --signature-gap: 26px;
+          }
+          @page { size: A4; margin: var(--page-margin); }
           body {
-            margin: 0;
             color: #1c1c1c;
             font-family: Arial, Helvetica, sans-serif;
-            font-size: 12px;
-            line-height: 1.45;
+            font-size: var(--body-font-size);
+            line-height: var(--body-line-height);
+            margin: 0;
+            padding-bottom: 18px;
           }
-          @page { size: A4; margin: 12mm; }
-          main { padding: 24px 28px; }
+          main { padding: 0; }
           header {
             border-bottom: 2px solid #f2a51a;
             display: flex;
-            justify-content: space-between;
             gap: 20px;
-            padding-bottom: 14px;
+            justify-content: space-between;
+            padding-bottom: 12px;
           }
           h1, h2 { margin: 0; }
-          h1 { font-size: 19px; text-transform: uppercase; }
+          h1 { font-size: 18px; text-transform: uppercase; }
           h2 {
             border-bottom: 1px solid #d8d8d8;
-            font-size: 14px;
-            margin-top: 18px;
+            font-size: 13px;
+            margin-top: var(--section-gap);
             padding-bottom: 4px;
             text-transform: uppercase;
           }
@@ -63,26 +85,39 @@ export function renderRentalDocumentHtml(rental: RentalDetail): string {
           thead { display: table-header-group; }
           tfoot { display: table-row-group; }
           tr { break-inside: avoid; page-break-inside: avoid; }
-          th, td { border: 1px solid #d7d7d7; padding: 5px; text-align: left; }
+          th, td { border: 1px solid #d7d7d7; padding: var(--table-padding); text-align: left; }
           th { background: #f5f5f5; }
           tfoot th { background: #fbfaf4; }
           .grand-total th { background: #fff0c2; font-size: 13px; }
           .numeric { text-align: right; white-space: nowrap; }
-          .grid { display: grid; gap: 6px 20px; grid-template-columns: repeat(2, 1fr); margin-top: 8px; }
-          .muted { color: #555; }
-          .term { margin-top: 18px; text-align: justify; }
+          .grid { display: grid; gap: 5px 18px; grid-template-columns: repeat(2, 1fr); margin-top: 7px; }
+          .muted { color: #555; font-size: 10px; }
+          .term-block { break-inside: avoid; page-break-inside: avoid; }
+          .term { margin: 10px 0 0; text-align: justify; }
+          .signature-date { margin-top: 18px; }
           .signature {
             break-inside: avoid;
             display: grid;
-            gap: 28px;
+            gap: var(--signature-gap);
             grid-template-columns: 1fr 1fr;
-            margin-top: 42px;
+            margin-top: var(--signature-gap);
             page-break-inside: avoid;
           }
           .line { border-top: 1px solid #222; padding-top: 6px; text-align: center; }
+          .print-footer {
+            border-top: 1px solid #d8d8d8;
+            bottom: 0;
+            color: #666;
+            font-size: 9px;
+            left: 0;
+            padding-top: 4px;
+            position: fixed;
+            right: 0;
+            text-align: right;
+          }
         </style>
       </head>
-      <body>
+      <body class="print-${layoutMode}">
         <main>
           <header>
             <section>
@@ -154,18 +189,20 @@ export function renderRentalDocumentHtml(rental: RentalDetail): string {
             </tfoot>
           </table>
 
-          <h2>Termo de responsabilidade</h2>
-          <p class="term">
-            O locatário declara que recebeu os equipamentos acima em condições de uso, responsabilizando-se
-            pela guarda, conservação, devolução no prazo acordado e indenização por perda, dano, extravio ou
-            uso inadequado, conforme os valores registrados neste documento.
-          </p>
+          <section class="term-block">
+            <h2>TERMO DE RESPONSABILIDADE</h2>
+            <p class="term">${escapeHtml(RESPONSIBILITY_TERM_TEXT)}</p>
 
-          <div class="signature">
-            <div class="line">Assinatura da A3 Locação</div>
-            <div class="line">Assinatura do locatário ou recebedor</div>
-          </div>
-          <p class="muted">Documento gerado pelo A3 Manager.</p>
+            <div class="signature-date">
+              Local e data: ________________________________________________
+            </div>
+            <div class="signature">
+              <div class="line">Assinatura da A3 Locação</div>
+              <div class="line">Assinatura do locatário ou recebedor</div>
+            </div>
+            <p class="muted">Documento gerado pelo A3 Manager.</p>
+          </section>
+          <div class="print-footer">Locação ${escapeHtml(rental.code)} · A3 Manager</div>
         </main>
       </body>
     </html>`;

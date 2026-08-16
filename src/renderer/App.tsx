@@ -32,6 +32,10 @@ import { RentalLaunchView } from "./features/RentalLaunchView";
 import { RentalsView } from "./features/RentalsView";
 import { UsersView } from "./features/UsersView";
 import {
+  clearStoredDraftsForUser,
+  getSessionDraftStorage,
+} from "./lib/formDrafts";
+import {
   applyAppearance,
   onSystemAppearanceChange,
   persistAppearancePreference,
@@ -94,7 +98,10 @@ export function App() {
             resolvedTheme={appearance.resolvedTheme}
             onNavigate={setActiveView}
             onAppearanceChange={appearance.setMode}
-            onLogout={() => setCurrentUser(null)}
+            onLogout={() => {
+              clearStoredDraftsForUser(getSessionDraftStorage(), currentUser.id);
+              setCurrentUser(null);
+            }}
           />
         )}
       </div>
@@ -217,11 +224,11 @@ function AuthenticatedShell({
 
       <main className="workspace" data-active-view={activeView}>
         {activeView === "rentals" && <RentalsView />}
-        {activeView === "launch" && <RentalLaunchView />}
-        {activeView === "customers" && <CustomersView />}
-        {activeView === "equipment" && <EquipmentView />}
-        {activeView === "company" && <CompanyView />}
-        {activeView === "users" && <UsersView />}
+        {activeView === "launch" && <RentalLaunchView draftUserId={currentUser.id} />}
+        {activeView === "customers" && <CustomersView draftUserId={currentUser.id} />}
+        {activeView === "equipment" && <EquipmentView draftUserId={currentUser.id} />}
+        {activeView === "company" && <CompanyView draftUserId={currentUser.id} />}
+        {activeView === "users" && <UsersView draftUserId={currentUser.id} />}
       </main>
     </div>
     </TooltipProvider>

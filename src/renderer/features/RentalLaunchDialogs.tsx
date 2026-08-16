@@ -12,6 +12,7 @@ type RentalDraft = Omit<RentalLaunchInput, "customerId" | "items">;
 export function RentalReview({
   customerName,
   form,
+  itemLines,
   totalQuantity,
   totals,
   returnDate,
@@ -21,6 +22,7 @@ export function RentalReview({
 }: {
   customerName?: string;
   form: RentalDraft;
+  itemLines: number;
   totalQuantity: number;
   totals: RentalMoneyTotals;
   returnDate: string;
@@ -36,7 +38,7 @@ export function RentalReview({
       </div>
       <dl>
         <div><dt>Cliente</dt><dd>{customerName ?? "Não selecionado"}</dd></div>
-        <div><dt>Equipamentos</dt><dd>{totalQuantity ? `${totalQuantity} unidade${totalQuantity === 1 ? "" : "s"}` : "Nenhum item"}</dd></div>
+        <div><dt>Equipamentos</dt><dd>{itemLines ? `${itemLines} linha${itemLines === 1 ? "" : "s"} · ${totalQuantity} unidade${totalQuantity === 1 ? "" : "s"}` : "Nenhum item"}</dd></div>
         <div><dt>Período</dt><dd>{periodLabels[form.period]}</dd></div>
         <div><dt>Devolução</dt><dd>{returnDate ? formatDate(returnDate) : "Não calculada"}</dd></div>
         <div><dt>Pagamento</dt><dd>{paymentLabels[form.paymentMethod]}{form.installments ? ` · ${form.installments}x` : ""}</dd></div>
@@ -79,16 +81,27 @@ export function CustomerSearchModal({ onClose, onSelect }: { onClose(): void; on
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<CustomerSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [completed, setCompleted] = useState(false);
   const ready = search.trim().length >= 2 || search.replace(/\D/g, "").length >= 3;
 
   useEffect(() => {
-    if (!ready) { setResults([]); return; }
+    if (!ready) { setResults([]); setLoading(false); setCompleted(false); return; }
     let active = true;
+    setResults([]);
+    setLoading(true);
+    setCompleted(false);
     const handle = window.setTimeout(() => {
-      setLoading(true);
       window.a3.searchCustomers(search)
-        .then((rows) => active && setResults(rows))
-        .catch(() => active && setResults([]))
+        .then((rows) => {
+          if (!active) return;
+          setResults(rows);
+          setCompleted(true);
+        })
+        .catch(() => {
+          if (!active) return;
+          setResults([]);
+          setCompleted(true);
+        })
         .finally(() => active && setLoading(false));
     }, 250);
     return () => { active = false; window.clearTimeout(handle); };
@@ -99,7 +112,7 @@ export function CustomerSearchModal({ onClose, onSelect }: { onClose(): void; on
       <SearchInput value={search} onChange={setSearch} placeholder="Digite nome ou CPF" />
       {!ready ? <EmptyState icon={<Search size={24} />} title="Comece a buscar" description="Digite ao menos 2 letras ou 3 números." />
         : loading ? <Loading label="Buscando clientes" />
-        : results.length === 0 ? <EmptyState title="Nenhum cliente encontrado" description="Revise o termo informado e tente novamente." />
+        : completed && results.length === 0 ? <EmptyState title="Nenhum cliente encontrado" description="Revise o termo informado e tente novamente." />
         : <div className="search-results">{results.map((customer) => (
           <button key={customer.id} type="button" onClick={() => onSelect(customer)}>
             <span className="result-icon"><UserRound size={18} /></span>
@@ -115,16 +128,27 @@ export function EquipmentSearchModal({ selectedIds, onClose, onSelect }: { selec
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<EquipmentSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [completed, setCompleted] = useState(false);
   const ready = search.trim().length >= 2;
 
   useEffect(() => {
-    if (!ready) { setResults([]); return; }
+    if (!ready) { setResults([]); setLoading(false); setCompleted(false); return; }
     let active = true;
+    setResults([]);
+    setLoading(true);
+    setCompleted(false);
     const handle = window.setTimeout(() => {
-      setLoading(true);
       window.a3.searchEquipment(search)
-        .then((rows) => active && setResults(rows))
-        .catch(() => active && setResults([]))
+        .then((rows) => {
+          if (!active) return;
+          setResults(rows);
+          setCompleted(true);
+        })
+        .catch(() => {
+          if (!active) return;
+          setResults([]);
+          setCompleted(true);
+        })
         .finally(() => active && setLoading(false));
     }, 250);
     return () => { active = false; window.clearTimeout(handle); };
@@ -135,7 +159,7 @@ export function EquipmentSearchModal({ selectedIds, onClose, onSelect }: { selec
       <SearchInput value={search} onChange={setSearch} placeholder="Digite o nome do equipamento" />
       {!ready ? <EmptyState icon={<Search size={24} />} title="Comece a buscar" description="Digite ao menos 2 letras." />
         : loading ? <Loading label="Buscando equipamentos" />
-        : results.length === 0 ? <EmptyState title="Nenhum equipamento encontrado" description="Revise o termo informado e tente novamente." />
+        : completed && results.length === 0 ? <EmptyState title="Nenhum equipamento encontrado" description="Revise o termo informado e tente novamente." />
         : <div className="search-results">{results.map((equipment) => {
           const selected = selectedIds.includes(equipment.id);
           return (

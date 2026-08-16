@@ -11,6 +11,7 @@ void app
   .then(async () => {
     const outputPath =
       process.argv[2] ?? path.join(process.cwd(), "output", "pdf", "a3-manager-validation.pdf");
+    const itemCount = Math.max(1, Number(process.argv[3] ?? 18) || 18);
     const tempDir = path.join(process.cwd(), "tmp", "pdfs");
     fs.mkdirSync(tempDir, { recursive: true });
 
@@ -46,7 +47,7 @@ void app
       contact: "(11) 98888-7777"
     });
 
-    const items = Array.from({ length: 18 }, (_, index) => {
+    const items = Array.from({ length: itemCount }, (_, index) => {
       const equipment = service.createEquipment({
         name: `Equipamento de validação ${String(index + 1).padStart(2, "0")}`,
         equipmentValueCents: 90000 + index * 1000,

@@ -1,4 +1,4 @@
-import { Archive, Edit3, PackagePlus, SearchX } from "lucide-react";
+import { Archive, Edit3, Eraser, PackagePlus, RotateCcw, SearchX } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { formatCents, parseMoneyToCents } from "../../domain/money";
 import type { Equipment } from "../../domain/types";
@@ -16,6 +16,13 @@ import {
   SectionCard,
   StatusBadge,
 } from "../components/Form";
+import {
+  buildDraftKey,
+  getSessionDraftStorage,
+  readStoredDraft,
+  removeStoredDraft,
+  useStoredDraft,
+} from "../lib/formDrafts";
 
 interface EquipmentForm {
   name: string;
@@ -30,15 +37,30 @@ const emptyForm: EquipmentForm = {
   stockQuantity: "0",
 };
 
-export function EquipmentView() {
+export function EquipmentView({ draftUserId }: { draftUserId: string }) {
   const [rows, setRows] = useState<Equipment[]>([]);
   const [form, setForm] = useState<EquipmentForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBaseline, setEditBaseline] = useState<EquipmentForm | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<Equipment | null>(null);
+  const [clearConfirm, setClearConfirm] = useState(false);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const createDraftKey = buildDraftKey(draftUserId, "equipment:create");
+  const activeDraftKey = editingId
+    ? buildDraftKey(draftUserId, `equipment:edit:${editingId}`)
+    : createDraftKey;
+  const draftIsMeaningful = editingId && editBaseline
+    ? hasEquipmentFormChanged(form, editBaseline)
+    : isMeaningfulEquipmentForm(form);
+
+  useStoredDraft({
+    key: activeDraftKey,
+    value: form,
+    meaningful: Boolean(draftIsMeaningful),
+  });
 
   useEffect(() => {
     void load("");
@@ -58,20 +80,29 @@ export function EquipmentView() {
 
   function startCreate() {
     setEditingId(null);
-    setForm(emptyForm);
+    setEditBaseline(null);
+    const restored = readStoredDraft(
+      getSessionDraftStorage(),
+      createDraftKey,
+      isEquipmentFormDraft,
+    );
+    setForm(restored ?? emptyForm);
+    if (restored) setMessage("Rascunho restaurado.");
     setError("");
     setFormOpen(true);
   }
   function startEdit(equipment: Equipment) {
+    const baseline = equipmentToForm(equipment);
+    const draftKey = buildDraftKey(draftUserId, `equipment:edit:${equipment.id}`);
+    const restored = readStoredDraft(
+      getSessionDraftStorage(),
+      draftKey,
+      isEquipmentFormDraft,
+    );
     setEditingId(equipment.id);
-    setForm({
-      name: equipment.name,
-      equipmentValue: formatCents(equipment.equipmentValueCents),
-      unitIndemnificationValue: formatCents(
-        equipment.unitIndemnificationValueCents,
-      ),
-      stockQuantity: String(equipment.stockQuantity),
-    });
+    setEditBaseline(baseline);
+    setForm(restored ?? baseline);
+    if (restored) setMessage("Rascunho restaurado.");
     setError("");
     setFormOpen(true);
   }
@@ -95,6 +126,10 @@ export function EquipmentView() {
         await window.a3.createEquipment(input);
         setMessage("Equipamento cadastrado com sucesso.");
       }
+      removeStoredDraft(getSessionDraftStorage(), activeDraftKey);
+      setForm(emptyForm);
+      setEditingId(null);
+      setEditBaseline(null);
       setFormOpen(false);
       await load();
     } catch (caught) {
@@ -104,6 +139,29 @@ export function EquipmentView() {
           : "Não foi possível salvar o equipamento.",
       );
     }
+  }
+
+  function clearCurrentForm() {
+    if (editingId && editBaseline) {
+      setForm(editBaseline);
+      removeStoredDraft(getSessionDraftStorage(), activeDraftKey);
+      setError("");
+      return;
+    }
+
+    if (!isMeaningfulEquipmentForm(form)) {
+      resetCreateForm();
+      return;
+    }
+
+    setClearConfirm(true);
+  }
+
+  function resetCreateForm() {
+    setForm(emptyForm);
+    setError("");
+    setClearConfirm(false);
+    removeStoredDraft(getSessionDraftStorage(), createDraftKey);
   }
 
   async function confirmArchive() {
@@ -235,6 +293,14 @@ export function EquipmentView() {
               <AppButton
                 type="button"
                 variant="ghost"
+                icon={editingId ? <RotateCcw size={17} /> : <Eraser size={17} />}
+                onClick={clearCurrentForm}
+              >
+                {editingId ? "Desfazer alterações" : "Limpar"}
+              </AppButton>
+              <AppButton
+                type="button"
+                variant="ghost"
                 onClick={() => setFormOpen(false)}
               >
                 Cancelar
@@ -294,6 +360,57 @@ export function EquipmentView() {
           onConfirm={() => void confirmArchive()}
         />
       )}
+      {clearConfirm && (
+        <ConfirmDialog
+          title="Limpar os dados deste equipamento?"
+          description="Os dados preenchidos e o rascunho atual serão removidos."
+          confirmLabel="Limpar"
+          onClose={() => setClearConfirm(false)}
+          onConfirm={resetCreateForm}
+        >
+          <p className="confirm-copy">
+            Essa ação não altera equipamentos já salvos.
+          </p>
+        </ConfirmDialog>
+      )}
     </section>
+  );
+}
+
+function equipmentToForm(equipment: Equipment): EquipmentForm {
+  return {
+    name: equipment.name,
+    equipmentValue: formatCents(equipment.equipmentValueCents),
+    unitIndemnificationValue: formatCents(
+      equipment.unitIndemnificationValueCents,
+    ),
+    stockQuantity: String(equipment.stockQuantity),
+  };
+}
+
+function isMeaningfulEquipmentForm(form: EquipmentForm): boolean {
+  return Boolean(
+    form.name.trim() ||
+      form.equipmentValue.trim() ||
+      form.unitIndemnificationValue.trim() ||
+      form.stockQuantity.trim() !== "0",
+  );
+}
+
+function hasEquipmentFormChanged(
+  form: EquipmentForm,
+  baseline: EquipmentForm,
+): boolean {
+  return JSON.stringify(form) !== JSON.stringify(baseline);
+}
+
+function isEquipmentFormDraft(value: unknown): value is EquipmentForm {
+  if (!value || typeof value !== "object") return false;
+  const draft = value as Partial<Record<keyof EquipmentForm, unknown>>;
+  return (
+    typeof draft.name === "string" &&
+    typeof draft.equipmentValue === "string" &&
+    typeof draft.unitIndemnificationValue === "string" &&
+    typeof draft.stockQuantity === "string"
   );
 }

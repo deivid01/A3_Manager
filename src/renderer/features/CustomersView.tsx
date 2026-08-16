@@ -1,4 +1,4 @@
-import { Archive, Edit3, SearchX, UserPlus } from "lucide-react";
+import { Archive, Edit3, Eraser, RotateCcw, SearchX, UserPlus } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { formatCep, formatCpf } from "../../domain/normalization";
 import type { Customer } from "../../domain/types";
@@ -16,6 +16,13 @@ import {
   SectionCard,
   UfSelect,
 } from "../components/Form";
+import {
+  buildDraftKey,
+  getSessionDraftStorage,
+  readStoredDraft,
+  removeStoredDraft,
+  useStoredDraft,
+} from "../lib/formDrafts";
 
 const emptyForm: CustomerInput = {
   name: "",
@@ -30,15 +37,30 @@ const emptyForm: CustomerInput = {
   contact: "",
 };
 
-export function CustomersView() {
+export function CustomersView({ draftUserId }: { draftUserId: string }) {
   const [rows, setRows] = useState<Customer[]>([]);
   const [form, setForm] = useState<CustomerInput>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBaseline, setEditBaseline] = useState<CustomerInput | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<Customer | null>(null);
+  const [clearConfirm, setClearConfirm] = useState(false);
   const [search, setSearch] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const createDraftKey = buildDraftKey(draftUserId, "customers:create");
+  const activeDraftKey = editingId
+    ? buildDraftKey(draftUserId, `customers:edit:${editingId}`)
+    : createDraftKey;
+  const draftIsMeaningful = editingId && editBaseline
+    ? hasCustomerFormChanged(form, editBaseline)
+    : isMeaningfulCustomerForm(form);
+
+  useStoredDraft({
+    key: activeDraftKey,
+    value: form,
+    meaningful: Boolean(draftIsMeaningful),
+  });
 
   useEffect(() => {
     void load("");
@@ -58,25 +80,30 @@ export function CustomersView() {
 
   function startCreate() {
     setEditingId(null);
-    setForm(emptyForm);
+    setEditBaseline(null);
+    const restored = readStoredDraft(
+      getSessionDraftStorage(),
+      createDraftKey,
+      isCustomerInputDraft,
+    );
+    setForm(restored ?? emptyForm);
+    if (restored) setMessage("Rascunho restaurado.");
     setError("");
     setFormOpen(true);
   }
 
   function startEdit(customer: Customer) {
+    const baseline = customerToForm(customer);
+    const draftKey = buildDraftKey(draftUserId, `customers:edit:${customer.id}`);
+    const restored = readStoredDraft(
+      getSessionDraftStorage(),
+      draftKey,
+      isCustomerInputDraft,
+    );
     setEditingId(customer.id);
-    setForm({
-      name: customer.name,
-      cpf: customer.cpf,
-      rg: customer.rg,
-      street: customer.street,
-      neighborhood: customer.neighborhood,
-      number: customer.number,
-      cep: customer.cep,
-      city: customer.city,
-      state: customer.state as CustomerInput["state"],
-      contact: customer.contact,
-    });
+    setEditBaseline(baseline);
+    setForm(restored ?? baseline);
+    if (restored) setMessage("Rascunho restaurado.");
     setError("");
     setFormOpen(true);
   }
@@ -92,6 +119,10 @@ export function CustomersView() {
         await window.a3.createCustomer(form);
         setMessage("Cliente cadastrado com sucesso.");
       }
+      removeStoredDraft(getSessionDraftStorage(), activeDraftKey);
+      setForm(emptyForm);
+      setEditingId(null);
+      setEditBaseline(null);
       setFormOpen(false);
       await load();
     } catch (caught) {
@@ -101,6 +132,29 @@ export function CustomersView() {
           : "Não foi possível salvar o cliente.",
       );
     }
+  }
+
+  function clearCurrentForm() {
+    if (editingId && editBaseline) {
+      setForm(editBaseline);
+      removeStoredDraft(getSessionDraftStorage(), activeDraftKey);
+      setError("");
+      return;
+    }
+
+    if (!isMeaningfulCustomerForm(form)) {
+      resetCreateForm();
+      return;
+    }
+
+    setClearConfirm(true);
+  }
+
+  function resetCreateForm() {
+    setForm(emptyForm);
+    setError("");
+    setClearConfirm(false);
+    removeStoredDraft(getSessionDraftStorage(), createDraftKey);
   }
 
   async function confirmArchive() {
@@ -224,6 +278,14 @@ export function CustomersView() {
               <AppButton
                 type="button"
                 variant="ghost"
+                icon={editingId ? <RotateCcw size={17} /> : <Eraser size={17} />}
+                onClick={clearCurrentForm}
+              >
+                {editingId ? "Desfazer alterações" : "Limpar"}
+              </AppButton>
+              <AppButton
+                type="button"
+                variant="ghost"
                 onClick={() => setFormOpen(false)}
               >
                 Cancelar
@@ -328,6 +390,72 @@ export function CustomersView() {
           onConfirm={() => void confirmArchive()}
         />
       )}
+      {clearConfirm && (
+        <ConfirmDialog
+          title="Limpar os dados deste cliente?"
+          description="Os dados preenchidos e o rascunho atual serão removidos."
+          confirmLabel="Limpar"
+          onClose={() => setClearConfirm(false)}
+          onConfirm={resetCreateForm}
+        >
+          <p className="confirm-copy">
+            Essa ação não altera clientes já salvos.
+          </p>
+        </ConfirmDialog>
+      )}
     </section>
+  );
+}
+
+function customerToForm(customer: Customer): CustomerInput {
+  return {
+    name: customer.name,
+    cpf: customer.cpf,
+    rg: customer.rg,
+    street: customer.street,
+    neighborhood: customer.neighborhood,
+    number: customer.number,
+    cep: customer.cep,
+    city: customer.city,
+    state: customer.state as CustomerInput["state"],
+    contact: customer.contact,
+  };
+}
+
+function isMeaningfulCustomerForm(form: CustomerInput): boolean {
+  return Boolean(
+    form.name.trim() ||
+      form.cpf.trim() ||
+      form.rg.trim() ||
+      form.street.trim() ||
+      form.neighborhood.trim() ||
+      form.number.trim() ||
+      form.cep.trim() ||
+      form.city.trim() ||
+      form.contact.trim(),
+  );
+}
+
+function hasCustomerFormChanged(
+  form: CustomerInput,
+  baseline: CustomerInput,
+): boolean {
+  return JSON.stringify(form) !== JSON.stringify(baseline);
+}
+
+function isCustomerInputDraft(value: unknown): value is CustomerInput {
+  if (!value || typeof value !== "object") return false;
+  const draft = value as Partial<Record<keyof CustomerInput, unknown>>;
+  return (
+    typeof draft.name === "string" &&
+    typeof draft.cpf === "string" &&
+    typeof draft.rg === "string" &&
+    typeof draft.street === "string" &&
+    typeof draft.neighborhood === "string" &&
+    typeof draft.number === "string" &&
+    typeof draft.cep === "string" &&
+    typeof draft.city === "string" &&
+    typeof draft.state === "string" &&
+    typeof draft.contact === "string"
   );
 }

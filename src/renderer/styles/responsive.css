@@ -57,6 +57,7 @@
   .form-grid.address, .form-grid.two { grid-template-columns: 1fr; }
   .span-two { grid-column: auto; }
   .form-submit-row { align-items: stretch; flex-direction: column; }
+  .form-submit-actions { flex-direction: column; }
   .form-submit-row .app-button { width: 100%; }
   .filter-grid { grid-template-columns: 1fr; }
   .filter-actions .app-button { flex: 1; }

@@ -20,8 +20,8 @@ export class EquipmentApplicationService {
     const params: DbParam[] = [];
     let where = "archived_at IS NULL";
     if (normalized) {
-      where += " AND name_normalized LIKE ?";
-      params.push(`${normalized}%`);
+      const nameWhere = buildNameSearchWhere(normalized, params, 1);
+      if (nameWhere) where += ` AND ${nameWhere}`;
     }
     return this.db
       .queryAll(
@@ -34,12 +34,15 @@ export class EquipmentApplicationService {
   search(search: string): EquipmentSearchResult[] {
     const normalized = normalizeSearch(search);
     if (normalized.length < 2) return [];
+    const params: DbParam[] = [];
+    const nameWhere = buildNameSearchWhere(normalized, params, 2);
+    if (!nameWhere) return [];
     return this.db
       .queryAll(
         `SELECT id, name, stock_quantity, equipment_value_cents, unit_indemnification_value_cents
-       FROM equipment WHERE archived_at IS NULL AND name_normalized LIKE ?
+       FROM equipment WHERE archived_at IS NULL AND ${nameWhere}
        ORDER BY name_normalized ASC LIMIT 10`,
-        [`${normalized}%`],
+        params,
       )
       .map((row) => ({
         id: String(row.id),
@@ -101,4 +104,24 @@ export class EquipmentApplicationService {
       [now, now, id],
     );
   }
+}
+
+function buildNameSearchWhere(
+  normalizedSearch: string,
+  params: DbParam[],
+  minTermLength: number,
+): string {
+  const terms = normalizedSearch
+    .split(" ")
+    .filter((term) => term.length >= minTermLength);
+
+  for (const term of terms) {
+    params.push(`%${escapeLikeTerm(term)}%`);
+  }
+
+  return terms.map(() => "name_normalized LIKE ? ESCAPE '\\'").join(" AND ");
+}
+
+function escapeLikeTerm(term: string): string {
+  return term.replace(/[\\%_]/g, "\\$&");
 }

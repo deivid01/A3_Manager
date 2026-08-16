@@ -1,4 +1,4 @@
-import { CalendarDays, Check, CreditCard, Minus, PackagePlus, Plus, Search, Trash2, UserRound, UsersRound, WalletCards } from "lucide-react";
+import { CalendarDays, Check, CreditCard, Eraser, MapPin, Minus, PackagePlus, Plus, Search, Trash2, UserRound, UsersRound, WalletCards } from "lucide-react";
 import { useMemo, useState } from "react";
 import { calculateReturnDate } from "../../domain/dateRules";
 import { paymentLabels, periodLabels } from "../../domain/labels";
@@ -10,41 +10,57 @@ import {
 import { formatCep, formatCpf } from "../../domain/normalization";
 import { PAYMENT_METHODS, RENTAL_PERIODS, type CustomerSearchResult, type EquipmentSearchResult, type RentalDetail } from "../../domain/types";
 import type { RentalLaunchInput } from "../../shared/contracts";
-import { AppButton, EmptyState, Field, IconButton, PageHeader, SectionCard, SelectField, UfSelect } from "../components/Form";
+import { AppButton, ConfirmDialog, EmptyState, Field, IconButton, Message, PageHeader, SectionCard, SelectField, UfSelect } from "../components/Form";
 import { Switch } from "../components/ui/switch";
 import { CustomerSearchModal, EquipmentSearchModal, RentalReview, RentalSuccessModal } from "./RentalLaunchDialogs";
+import {
+  applyDeliveryAddress,
+  buildInitialRentalForm,
+  buildRentalLaunchForm,
+  customerDeliveryAddress,
+  emptyDeliveryAddress,
+  isMeaningfulRentalDraft,
+  isRentalLaunchStoredDraft,
+  updateManualDeliveryAddress,
+  type RentalFormState,
+  type SelectedRentalItem,
+} from "./rentalLaunchState";
+import {
+  buildDraftKey,
+  getSessionDraftStorage,
+  readStoredDraft,
+  removeStoredDraft,
+  useStoredDraft,
+} from "../lib/formDrafts";
 
-interface SelectedItem extends EquipmentSearchResult { quantity: number; }
-type RentalDraft = Omit<RentalLaunchInput, "customerId" | "items">;
-
-function buildInitialForm(): RentalDraft {
-  return {
-    period: "MONTHLY",
-    startDate: new Date().toISOString().slice(0, 10),
-    deliveryStreet: "",
-    deliveryNeighborhood: "",
-    deliveryNumber: "",
-    deliveryCep: "",
-    deliveryCity: "",
-    deliveryState: "",
-    receiverIsCustomer: true,
-    receiverName: "",
-    receiverCpf: "",
-    paymentMethod: "PIX",
-    installments: null,
-    clientRequestId: crypto.randomUUID(),
-  };
-}
-
-export function RentalLaunchView() {
-  const [form, setForm] = useState(buildInitialForm);
-  const [customer, setCustomer] = useState<CustomerSearchResult | null>(null);
-  const [items, setItems] = useState<SelectedItem[]>([]);
+export function RentalLaunchView({ draftUserId }: { draftUserId: string }) {
+  const draftKey = buildDraftKey(draftUserId, "rental-launch");
+  const [restoredDraft] = useState(() =>
+    readStoredDraft(getSessionDraftStorage(), draftKey, isRentalLaunchStoredDraft),
+  );
+  const [form, setForm] = useState<RentalFormState>(
+    () => restoredDraft?.form ?? buildInitialRentalForm(),
+  );
+  const [customer, setCustomer] = useState<CustomerSearchResult | null>(
+    () => restoredDraft?.customer ?? null,
+  );
+  const [items, setItems] = useState<SelectedRentalItem[]>(
+    () => restoredDraft?.items ?? [],
+  );
   const [customerModal, setCustomerModal] = useState(false);
   const [equipmentModal, setEquipmentModal] = useState(false);
   const [lastRental, setLastRental] = useState<RentalDetail | null>(null);
   const [launching, setLaunching] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const [message, setMessage] = useState(restoredDraft ? "Rascunho restaurado." : "");
   const [error, setError] = useState("");
+  const draftValue = { form, customer, items };
+
+  useStoredDraft({
+    key: draftKey,
+    value: draftValue,
+    meaningful: isMeaningfulRentalDraft(draftValue),
+  });
 
   const returnDate = useMemo(() => {
     try { return calculateReturnDate(form.startDate, form.period); }
@@ -61,16 +77,19 @@ export function RentalLaunchView() {
 
     setLaunching(true);
     try {
+      const launchForm = buildRentalLaunchForm(form, customer);
       const rental = await window.a3.launchRental({
-        ...form,
+        ...launchForm,
         customerId: customer.id,
-        installments: form.paymentMethod === "CREDIT_CARD" ? form.installments : null,
+        installments: launchForm.paymentMethod === "CREDIT_CARD" ? launchForm.installments : null,
         items: items.map((item) => ({ equipmentId: item.id, quantity: item.quantity })),
       });
       setLastRental(rental);
       setItems([]);
       setCustomer(null);
-      setForm(buildInitialForm());
+      setForm(buildInitialRentalForm());
+      setMessage("");
+      removeStoredDraft(getSessionDraftStorage(), draftKey);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Não foi possível lançar a locação.");
     } finally {
@@ -91,11 +110,48 @@ export function RentalLaunchView() {
       : item));
   }
 
+  function selectCustomer(selected: CustomerSearchResult) {
+    setCustomer(selected);
+    setForm((current) => current.deliveryMatchesCustomer
+      ? applyDeliveryAddress(current, customerDeliveryAddress(selected))
+      : current);
+    setCustomerModal(false);
+  }
+
+  function requestClearForm() {
+    if (!isMeaningfulRentalDraft({ form, customer, items })) {
+      resetRentalForm();
+      return;
+    }
+    setClearConfirm(true);
+  }
+
+  function resetRentalForm() {
+    setForm(buildInitialRentalForm());
+    setCustomer(null);
+    setItems([]);
+    setError("");
+    setMessage("");
+    setClearConfirm(false);
+    removeStoredDraft(getSessionDraftStorage(), draftKey);
+  }
+
   return (
     <section className="view" data-screen="rental-launch">
       <PageHeader
         title="Nova locação"
+        action={
+          <AppButton
+            variant="ghost"
+            icon={<Eraser size={18} />}
+            type="button"
+            onClick={requestClearForm}
+          >
+            Limpar formulário
+          </AppButton>
+        }
       />
+      {message && <Message kind="info">{message}</Message>}
       <div className="rental-launch-layout">
         <div className="rental-flow">
           <CustomerSection customer={customer} onSearch={() => setCustomerModal(true)} />
@@ -106,13 +162,14 @@ export function RentalLaunchView() {
             onRemove={(id) => setItems((current) => current.filter((item) => item.id !== id))}
           />
           <PeriodSection form={form} returnDate={returnDate} onChange={setForm} />
-          <DeliverySection form={form} onChange={setForm} />
+          <DeliverySection customer={customer} form={form} onChange={setForm} />
           <ReceiverSection form={form} onChange={setForm} />
           <PaymentSection form={form} onChange={setForm} />
         </div>
         <RentalReview
           customerName={customer?.name}
           form={form}
+          itemLines={items.length}
           totalQuantity={totalQuantity}
           totals={rentalTotals}
           returnDate={returnDate}
@@ -125,7 +182,7 @@ export function RentalLaunchView() {
       {customerModal && (
         <CustomerSearchModal
           onClose={() => setCustomerModal(false)}
-          onSelect={(selected) => { setCustomer(selected); setCustomerModal(false); }}
+          onSelect={selectCustomer}
         />
       )}
       {equipmentModal && (
@@ -136,6 +193,19 @@ export function RentalLaunchView() {
         />
       )}
       {lastRental && <RentalSuccessModal rental={lastRental} onClose={() => setLastRental(null)} />}
+      {clearConfirm && (
+        <ConfirmDialog
+          title="Limpar os dados desta locação?"
+          description="Os dados preenchidos e o rascunho atual serão removidos."
+          confirmLabel="Limpar"
+          onClose={() => setClearConfirm(false)}
+          onConfirm={resetRentalForm}
+        >
+          <p className="confirm-copy">
+            Essa ação não altera clientes, equipamentos ou locações já salvas.
+          </p>
+        </ConfirmDialog>
+      )}
     </section>
   );
 }
@@ -165,7 +235,7 @@ function CustomerSection({ customer, onSearch }: { customer: CustomerSearchResul
 }
 
 function EquipmentSection({ items, onSearch, onQuantityChange, onRemove }: {
-  items: SelectedItem[];
+  items: SelectedRentalItem[];
   onSearch(): void;
   onQuantityChange(id: string, delta: number): void;
   onRemove(id: string): void;
@@ -199,7 +269,7 @@ function SelectedEquipmentItem({
   onQuantityChange,
   onRemove,
 }: {
-  item: SelectedItem;
+  item: SelectedRentalItem;
   onQuantityChange(id: string, delta: number): void;
   onRemove(id: string): void;
 }) {
@@ -228,7 +298,7 @@ function SelectedEquipmentItem({
   );
 }
 
-function PeriodSection({ form, returnDate, onChange }: { form: RentalDraft; returnDate: string; onChange(form: RentalDraft): void }) {
+function PeriodSection({ form, returnDate, onChange }: { form: RentalFormState; returnDate: string; onChange(form: RentalFormState): void }) {
   return (
     <SectionCard title="3. Período" description="A devolução é calculada automaticamente a partir da data inicial.">
       <div className="choice-group">
@@ -249,7 +319,7 @@ function PeriodSection({ form, returnDate, onChange }: { form: RentalDraft; retu
   );
 }
 
-function PaymentSection({ form, onChange }: { form: RentalDraft; onChange(form: RentalDraft): void }) {
+function PaymentSection({ form, onChange }: { form: RentalFormState; onChange(form: RentalFormState): void }) {
   return (
     <SectionCard title="6. Pagamento">
       <div className="choice-group">
@@ -272,22 +342,80 @@ function PaymentSection({ form, onChange }: { form: RentalDraft; onChange(form: 
   );
 }
 
-function DeliverySection({ form, onChange }: { form: RentalDraft; onChange(form: RentalDraft): void }) {
+function DeliverySection({
+  customer,
+  form,
+  onChange,
+}: {
+  customer: CustomerSearchResult | null;
+  form: RentalFormState;
+  onChange(form: RentalFormState): void;
+}) {
+  const stateLabel = form.deliveryMatchesCustomer ? "Sim" : "Não";
+
+  function changeDeliveryMode(checked: boolean) {
+    const nextForm = { ...form, deliveryMatchesCustomer: checked };
+    if (checked) {
+      onChange(applyDeliveryAddress(
+        nextForm,
+        customer ? customerDeliveryAddress(customer) : emptyDeliveryAddress(),
+      ));
+      return;
+    }
+
+    onChange(applyDeliveryAddress(nextForm, form.manualDeliveryAddress));
+  }
+
   return (
     <SectionCard title="4. Entrega">
-      <div className="form-grid address">
-        <Field className="span-two" label="Rua" value={form.deliveryStreet} onChange={(event) => onChange({ ...form, deliveryStreet: event.target.value })} />
-        <Field label="Número" value={form.deliveryNumber} onChange={(event) => onChange({ ...form, deliveryNumber: event.target.value })} />
-        <Field label="Bairro" value={form.deliveryNeighborhood} onChange={(event) => onChange({ ...form, deliveryNeighborhood: event.target.value })} />
-        <Field label="CEP" value={form.deliveryCep} onChange={(event) => onChange({ ...form, deliveryCep: formatCep(event.target.value) })} />
-        <Field label="Cidade" value={form.deliveryCity} onChange={(event) => onChange({ ...form, deliveryCity: event.target.value })} />
-        <UfSelect allowEmpty value={form.deliveryState} onChange={(event) => onChange({ ...form, deliveryState: event.target.value as RentalLaunchInput["deliveryState"] })} />
+      <div className="switch-row">
+        <Switch
+          checked={form.deliveryMatchesCustomer}
+          disabled={!customer}
+          aria-label="O endereço de entrega é o mesmo do cliente?"
+          onCheckedChange={changeDeliveryMode}
+        />
+        <div><strong>O endereço de entrega é o mesmo do cliente?</strong></div>
+        <span className={form.deliveryMatchesCustomer ? "switch-state yes" : "switch-state no"}>{stateLabel}</span>
       </div>
+      {form.deliveryMatchesCustomer ? (
+        <DeliveryPreview customer={customer} />
+      ) : (
+        <div className="form-grid address delivery-fields">
+          <Field className="span-two" label="Rua" value={form.deliveryStreet} onChange={(event) => onChange(updateManualDeliveryAddress(form, { deliveryStreet: event.target.value }))} />
+          <Field label="Número" value={form.deliveryNumber} onChange={(event) => onChange(updateManualDeliveryAddress(form, { deliveryNumber: event.target.value }))} />
+          <Field label="Bairro" value={form.deliveryNeighborhood} onChange={(event) => onChange(updateManualDeliveryAddress(form, { deliveryNeighborhood: event.target.value }))} />
+          <Field label="CEP" value={form.deliveryCep} onChange={(event) => onChange(updateManualDeliveryAddress(form, { deliveryCep: formatCep(event.target.value) }))} />
+          <Field label="Cidade" value={form.deliveryCity} onChange={(event) => onChange(updateManualDeliveryAddress(form, { deliveryCity: event.target.value }))} />
+          <UfSelect allowEmpty value={form.deliveryState} onChange={(event) => onChange(updateManualDeliveryAddress(form, { deliveryState: event.target.value as RentalLaunchInput["deliveryState"] }))} />
+        </div>
+      )}
     </SectionCard>
   );
 }
 
-function ReceiverSection({ form, onChange }: { form: RentalDraft; onChange(form: RentalDraft): void }) {
+function DeliveryPreview({ customer }: { customer: CustomerSearchResult | null }) {
+  if (!customer) {
+    return (
+      <div className="address-preview empty">
+        <MapPin size={18} />
+        <span>Selecione um cliente para usar o endereço cadastrado.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="address-preview">
+      <MapPin size={18} />
+      <div>
+        <strong>{customer.street}, {customer.number}</strong>
+        <span>{customer.neighborhood} · {customer.cep} · {customer.city}/{customer.state}</span>
+      </div>
+    </div>
+  );
+}
+
+function ReceiverSection({ form, onChange }: { form: RentalFormState; onChange(form: RentalFormState): void }) {
   const receiverStateLabel = form.receiverIsCustomer ? "Sim" : "Não";
 
   return (

@@ -1,4 +1,4 @@
-import { ShieldCheck, UserPlus, UsersRound } from "lucide-react";
+import { Eraser, ShieldCheck, UserPlus, UsersRound } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { roleLabels } from "../../domain/labels";
 import {
@@ -9,6 +9,7 @@ import type { User } from "../../domain/types";
 import type { UserInput } from "../../shared/contracts";
 import {
   AppButton,
+  ConfirmDialog,
   EmptyState,
   Field,
   Message,
@@ -18,15 +19,32 @@ import {
   SelectField,
   StatusBadge,
 } from "../components/Form";
+import {
+  buildDraftKey,
+  getSessionDraftStorage,
+  readStoredDraft,
+  removeStoredDraft,
+  useStoredDraft,
+} from "../lib/formDrafts";
 
 const emptyForm: UserInput = { username: "", password: "", role: "USER" };
+type UserCreateDraft = Pick<UserInput, "username" | "role">;
 
-export function UsersView() {
+export function UsersView({ draftUserId }: { draftUserId: string }) {
   const [rows, setRows] = useState<User[]>([]);
   const [form, setForm] = useState<UserInput>(emptyForm);
   const [formOpen, setFormOpen] = useState(false);
+  const [clearConfirm, setClearConfirm] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const createDraftKey = buildDraftKey(draftUserId, "users:create");
+  const userDraft = toUserCreateDraft(form);
+
+  useStoredDraft({
+    key: createDraftKey,
+    value: userDraft,
+    meaningful: isMeaningfulUserDraft(userDraft),
+  });
 
   useEffect(() => {
     void load();
@@ -43,6 +61,18 @@ export function UsersView() {
     }
   }
 
+  function startCreate() {
+    const restored = readStoredDraft(
+      getSessionDraftStorage(),
+      createDraftKey,
+      isUserCreateDraft,
+    );
+    setForm(restored ? { ...restored, password: "" } : emptyForm);
+    if (restored) setMessage("Rascunho restaurado.");
+    setError("");
+    setFormOpen(true);
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -53,6 +83,7 @@ export function UsersView() {
     setForm(normalizedForm);
     try {
       await window.a3.createUser(normalizedForm);
+      removeStoredDraft(getSessionDraftStorage(), createDraftKey);
       setForm(emptyForm);
       setFormOpen(false);
       setMessage("Usuário criado com sucesso.");
@@ -66,6 +97,22 @@ export function UsersView() {
     }
   }
 
+  function requestClearForm() {
+    if (!hasUserFormContent(form)) {
+      resetCreateForm();
+      return;
+    }
+
+    setClearConfirm(true);
+  }
+
+  function resetCreateForm() {
+    setForm(emptyForm);
+    setError("");
+    setClearConfirm(false);
+    removeStoredDraft(getSessionDraftStorage(), createDraftKey);
+  }
+
   return (
     <section className="view view-medium" data-screen="users">
       <PageHeader
@@ -76,10 +123,7 @@ export function UsersView() {
             variant="primary"
             icon={<UserPlus size={18} />}
             type="button"
-            onClick={() => {
-              setError("");
-              setFormOpen(true);
-            }}
+            onClick={startCreate}
           >
             Novo usuário
           </AppButton>
@@ -143,6 +187,14 @@ export function UsersView() {
               <AppButton
                 type="button"
                 variant="ghost"
+                icon={<Eraser size={17} />}
+                onClick={requestClearForm}
+              >
+                Limpar
+              </AppButton>
+              <AppButton
+                type="button"
+                variant="ghost"
                 onClick={() => setFormOpen(false)}
               >
                 Cancelar
@@ -194,6 +246,47 @@ export function UsersView() {
           </form>
         </Modal>
       )}
+      {clearConfirm && (
+        <ConfirmDialog
+          title="Limpar os dados deste usuário?"
+          description="Os dados preenchidos e o rascunho atual serão removidos."
+          confirmLabel="Limpar"
+          onClose={() => setClearConfirm(false)}
+          onConfirm={resetCreateForm}
+        >
+          <p className="confirm-copy">
+            A senha digitada será descartada e não é salva em rascunhos.
+          </p>
+        </ConfirmDialog>
+      )}
     </section>
+  );
+}
+
+function toUserCreateDraft(form: UserInput): UserCreateDraft {
+  return {
+    username: form.username,
+    role: form.role,
+  };
+}
+
+function isMeaningfulUserDraft(draft: UserCreateDraft): boolean {
+  return Boolean(draft.username.trim() || draft.role !== "USER");
+}
+
+function hasUserFormContent(form: UserInput): boolean {
+  return Boolean(
+    form.username.trim() ||
+      form.password.trim() ||
+      form.role !== "USER",
+  );
+}
+
+function isUserCreateDraft(value: unknown): value is UserCreateDraft {
+  if (!value || typeof value !== "object") return false;
+  const draft = value as Partial<Record<keyof UserCreateDraft, unknown>>;
+  return (
+    typeof draft.username === "string" &&
+    (draft.role === "USER" || draft.role === "ADMIN")
   );
 }

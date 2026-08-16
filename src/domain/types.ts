@@ -155,7 +155,12 @@ export interface CustomerSearchResult {
   id: string;
   name: string;
   cpf: string;
+  street: string;
+  neighborhood: string;
+  number: string;
+  cep: string;
   city: string;
+  state: string;
   contact: string;
 }
 

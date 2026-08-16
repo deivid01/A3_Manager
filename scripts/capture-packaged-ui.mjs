@@ -112,11 +112,13 @@ try {
   await prepareRentalSelections();
   await captureMatrix("rental-launch-customer-receives");
   await addEquipmentBySearch("Betoneira");
+  await addEquipmentBySearch("teste");
   await captureMatrix("rental-launch-multiple-items");
   receiverToggleAudit = await validateReceiverToggleStability();
+  await captureMatrix("rental-launch-receiver-sim", "__receiver-switch__");
   await setReceiverIsCustomer(false);
   await setReceiverFields("Mariana Souza", "390.533.447-05");
-  await captureMatrix("rental-launch-receiver-other", ".switch-row");
+  await captureMatrix("rental-launch-receiver-other", ".receiver-fields");
   await setCreditPayment();
   await captureMatrix("rental-launch-credit", ".choice-grid.payments");
   await setReceiverIsCustomer(true);
@@ -189,6 +191,10 @@ async function seedScenario() {
       name: 'Betoneira 400 Litros', equipmentValueCents: 420000,
       unitIndemnificationValueCents: 88000, stockQuantity: 4
     });
+    await window.a3.createEquipment({
+      name: 'EQUIPAMENTO TESTE', equipmentValueCents: 350000,
+      unitIndemnificationValueCents: 65000, stockQuantity: 5
+    });
     await window.a3.launchRental({
       customerId: customer.id, period: 'MONTHLY', startDate: '2026-08-15',
       items: [{ equipmentId: equipment.id, quantity: 2 }],
@@ -235,8 +241,8 @@ async function addEquipmentBySearch(search) {
 
 async function validateReceiverToggleStability() {
   const samples = [];
-  for (let index = 0; index < 10; index += 1) {
-    await evaluate("document.querySelector('.switch-row [role=switch]').click()");
+  for (let index = 0; index < 20; index += 1) {
+    await evaluate("[...document.querySelectorAll('.switch-row [role=switch]')].at(-1).click()");
     await wait(120);
     samples.push(await readRentalLaunchLayoutHealth(`toggle-${index + 1}`));
   }
@@ -256,7 +262,7 @@ async function validateReceiverToggleStability() {
 
 async function setReceiverIsCustomer(value) {
   await evaluate(`(() => {
-    const control = document.querySelector('.switch-row [role=switch]');
+    const control = [...document.querySelectorAll('.switch-row [role=switch]')].at(-1);
     const checked = control.getAttribute('aria-checked') === 'true' || control.dataset.state === 'checked';
     if (checked !== ${JSON.stringify(value)}) control.click();
   })()`);
@@ -344,7 +350,7 @@ async function readRentalLaunchLayoutHealth(label) {
     return {
       label: ${JSON.stringify(label)},
       receiverIsCustomer: (() => {
-        const control = document.querySelector('.switch-row [role=switch]');
+        const control = [...document.querySelectorAll('.switch-row [role=switch]')].at(-1);
         return control.getAttribute('aria-checked') === 'true' || control.dataset.state === 'checked';
       })(),
       receiverFieldsVisible: Boolean(document.querySelector('.receiver-fields')),
@@ -411,7 +417,9 @@ async function setInputValue(selector, value) {
 
 async function scrollIntoView(selector) {
   await evaluate(`(() => {
-    const target = document.querySelector(${JSON.stringify(selector)});
+    const target = ${JSON.stringify(selector)} === "__receiver-switch__"
+      ? document.querySelectorAll('.switch-row')[1]
+      : document.querySelector(${JSON.stringify(selector)});
     if (!target) throw new Error('Elemento nÃ£o encontrado para rolagem: ${selector}');
     target.scrollIntoView({ block: 'center', inline: 'nearest' });
   })()`);
@@ -455,7 +463,7 @@ async function setViewport(viewport) {
 
 async function readReceiverChecked() {
   return evaluate(`(() => {
-    const control = document.querySelector('.switch-row [role=switch]');
+    const control = [...document.querySelectorAll('.switch-row [role=switch]')].at(-1);
     return control.getAttribute('aria-checked') === 'true' || control.dataset.state === 'checked';
   })()`);
 }

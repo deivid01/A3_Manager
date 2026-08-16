@@ -235,6 +235,89 @@ describe("serviços principais do A3 Manager", () => {
     expect(detail.companySnapshot.tradeName).toBe("A3 Locação");
   });
 
+  it("preserva snapshot histórico do endereço de entrega após edição do cliente", async () => {
+    const { service } = await createTestService();
+    const user = await service.login({ username: "SYSTEM DEV", password: "_int@383" });
+    const customer = service.createCustomer(validCustomer);
+    const equipment = service.createEquipment(validEquipment);
+    const rental = service.launchRental(
+      {
+        customerId: customer.id,
+        period: "MONTHLY",
+        startDate: "2026-08-14",
+        items: [{ equipmentId: equipment.id, quantity: 1 }],
+        deliveryStreet: customer.street,
+        deliveryNeighborhood: customer.neighborhood,
+        deliveryNumber: customer.number,
+        deliveryCep: customer.cep,
+        deliveryCity: customer.city,
+        deliveryState: customer.state as "SP",
+        receiverIsCustomer: true,
+        receiverName: "",
+        receiverCpf: "",
+        paymentMethod: "PIX",
+        installments: null
+      },
+      user.id
+    );
+
+    service.updateCustomer(customer.id, {
+      ...validCustomer,
+      street: "Rua Nova",
+      number: "999",
+      neighborhood: "Outro bairro"
+    });
+
+    const detail = service.getRental(rental.id);
+    expect(detail.deliveryStreet).toBe("Rua Central");
+    expect(detail.deliveryNumber).toBe("100");
+    expect(detail.deliveryNeighborhood).toBe("Centro");
+  });
+
+  it("lança e finaliza locação grande mantendo transação e estoque corretos", async () => {
+    const { service } = await createTestService();
+    const user = await service.login({ username: "SYSTEM DEV", password: "_int@383" });
+    const customer = service.createCustomer(validCustomer);
+    const equipment = Array.from({ length: 12 }, (_, index) =>
+      service.createEquipment({
+        ...validEquipment,
+        name: `Equipamento grande ${String(index + 1).padStart(2, "0")}`,
+        stockQuantity: 3
+      })
+    );
+
+    const rental = service.launchRental(
+      {
+        customerId: customer.id,
+        period: "MONTHLY",
+        startDate: "2026-08-14",
+        items: equipment.map((item) => ({ equipmentId: item.id, quantity: 2 })),
+        deliveryStreet: "",
+        deliveryNeighborhood: "",
+        deliveryNumber: "",
+        deliveryCep: "",
+        deliveryCity: "",
+        deliveryState: "",
+        receiverIsCustomer: true,
+        receiverName: "",
+        receiverCpf: "",
+        paymentMethod: "PIX",
+        installments: null
+      },
+      user.id
+    );
+
+    expect(rental.items).toHaveLength(12);
+    expect(service.getRental(rental.id).items.reduce((sum, item) => sum + item.quantity, 0)).toBe(24);
+    expect(service.listEquipment("Equipamento grande")[0]?.stockQuantity).toBe(1);
+
+    const finalized = service.finalizeRental(rental.id);
+
+    expect(finalized.status).toBe("FINALIZED");
+    expect(service.listEquipment("Equipamento grande")).toHaveLength(12);
+    expect(service.listEquipment("Equipamento grande").every((item) => item.stockQuantity === 3)).toBe(true);
+  });
+
   it("pagina relatório com 10 registros iniciais sem duplicar", async () => {
     const { service } = await createTestService();
     const user = await service.login({ username: "SYSTEM DEV", password: "_int@383" });
@@ -308,7 +391,9 @@ describe("serviços principais do A3 Manager", () => {
     expect(html).toContain("Valor total dos equipamentos");
     expect(html).toContain("Valor total da indenização");
     expect(html).toContain("TOTAL");
-    expect(html).toContain("Termo de responsabilidade");
+    expect(html).toContain("TERMO DE RESPONSABILIDADE");
+    expect(html).toContain("O LOCATÁRIO declara receber os equipamentos relacionados");
+    expect(html).toContain("print-footer");
     expect(html).not.toContain("Valor da locação");
     expect(html).not.toContain("Nova locação");
   });

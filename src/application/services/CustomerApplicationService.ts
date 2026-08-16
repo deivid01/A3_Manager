@@ -42,7 +42,7 @@ export class CustomerApplicationService {
     if (normalized.length < 2 && digits.length < 3) return [];
     return this.db
       .queryAll(
-        `SELECT id, name, cpf, city, contact FROM customers
+        `SELECT id, name, cpf, street, neighborhood, number, cep, city, state, contact FROM customers
        WHERE archived_at IS NULL AND (name_normalized LIKE ? OR cpf_normalized LIKE ?)
        ORDER BY name_normalized ASC LIMIT 10`,
         [`${normalized}%`, `${digits}%`],
@@ -51,7 +51,12 @@ export class CustomerApplicationService {
         id: String(row.id),
         name: String(row.name),
         cpf: String(row.cpf),
+        street: String(row.street),
+        neighborhood: String(row.neighborhood),
+        number: String(row.number),
+        cep: String(row.cep),
         city: String(row.city),
+        state: String(row.state),
         contact: String(row.contact),
       }));
   }

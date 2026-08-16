@@ -313,12 +313,14 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  children,
   onConfirm,
   onClose,
 }: {
   title: string;
   description: string;
   confirmLabel: string;
+  children?: ReactNode;
   onConfirm(): void;
   onClose(): void;
 }) {
@@ -338,10 +340,12 @@ export function ConfirmDialog({
         </>
       }
     >
-      <p className="confirm-copy">
-        Essa ação mantém o histórico existente, mas remove o registro das
-        seleções ativas.
-      </p>
+      {children ?? (
+        <p className="confirm-copy">
+          Essa ação mantém o histórico existente, mas remove o registro das
+          seleções ativas.
+        </p>
+      )}
     </Modal>
   );
 }

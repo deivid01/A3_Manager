@@ -1,4 +1,4 @@
-import { Building2, Save } from "lucide-react";
+import { Building2, RotateCcw, Save } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { formatCep } from "../../domain/normalization";
 import type { CompanyInput } from "../../shared/contracts";
@@ -10,6 +10,13 @@ import {
   SectionCard,
   UfSelect,
 } from "../components/Form";
+import {
+  buildDraftKey,
+  getSessionDraftStorage,
+  readStoredDraft,
+  removeStoredDraft,
+  useStoredDraft,
+} from "../lib/formDrafts";
 
 const emptyForm: CompanyInput = {
   legalName: "",
@@ -25,17 +32,26 @@ const emptyForm: CompanyInput = {
   email: "",
 };
 
-export function CompanyView() {
+export function CompanyView({ draftUserId }: { draftUserId: string }) {
   const [form, setForm] = useState<CompanyInput>(emptyForm);
+  const [baseline, setBaseline] = useState<CompanyInput | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const draftKey = buildDraftKey(draftUserId, "company:edit");
+  const hasChanges = Boolean(baseline && hasCompanyFormChanged(form, baseline));
+
+  useStoredDraft({
+    key: draftKey,
+    value: form,
+    meaningful: hasChanges,
+  });
 
   useEffect(() => {
     window.a3
       .getCompany()
-      .then((company) =>
-        setForm({
+      .then((company) => {
+        const loaded: CompanyInput = {
           legalName: company.legalName,
           tradeName: company.tradeName,
           document: company.document,
@@ -47,8 +63,16 @@ export function CompanyView() {
           state: company.state as CompanyInput["state"],
           contact: company.contact,
           email: company.email,
-        }),
-      )
+        };
+        const restored = readStoredDraft(
+          getSessionDraftStorage(),
+          draftKey,
+          isCompanyInputDraft,
+        );
+        setBaseline(loaded);
+        setForm(restored ?? loaded);
+        if (restored) setMessage("Rascunho restaurado.");
+      })
       .catch((caught) =>
         setError(
           caught instanceof Error
@@ -56,7 +80,7 @@ export function CompanyView() {
             : "Falha ao carregar a empresa.",
         ),
       );
-  }, []);
+  }, [draftKey]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -65,7 +89,10 @@ export function CompanyView() {
     setSaving(true);
     try {
       const saved = await window.a3.saveCompany(form);
-      setForm({ ...form, state: saved.state as CompanyInput["state"] });
+      const savedForm = { ...form, state: saved.state as CompanyInput["state"] };
+      setForm(savedForm);
+      setBaseline(savedForm);
+      removeStoredDraft(getSessionDraftStorage(), draftKey);
       setMessage("Dados da empresa atualizados.");
     } catch (caught) {
       setError(
@@ -76,6 +103,13 @@ export function CompanyView() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function discardChanges() {
+    if (!baseline) return;
+    setForm(baseline);
+    setError("");
+    removeStoredDraft(getSessionDraftStorage(), draftKey);
   }
 
   return (
@@ -181,16 +215,52 @@ export function CompanyView() {
             <Building2 size={17} /> Alterações futuras serão refletidas nos
             próximos documentos.
           </span>
-          <AppButton
-            variant="primary"
-            icon={<Save size={18} />}
-            loading={saving}
-            type="submit"
-          >
-            Salvar empresa
-          </AppButton>
+          <div className="form-submit-actions">
+            <AppButton
+              variant="ghost"
+              icon={<RotateCcw size={18} />}
+              type="button"
+              disabled={!hasChanges}
+              onClick={discardChanges}
+            >
+              Desfazer alterações
+            </AppButton>
+            <AppButton
+              variant="primary"
+              icon={<Save size={18} />}
+              loading={saving}
+              type="submit"
+            >
+              Salvar empresa
+            </AppButton>
+          </div>
         </div>
       </form>
     </section>
+  );
+}
+
+function hasCompanyFormChanged(
+  form: CompanyInput,
+  baseline: CompanyInput,
+): boolean {
+  return JSON.stringify(form) !== JSON.stringify(baseline);
+}
+
+function isCompanyInputDraft(value: unknown): value is CompanyInput {
+  if (!value || typeof value !== "object") return false;
+  const draft = value as Partial<Record<keyof CompanyInput, unknown>>;
+  return (
+    typeof draft.legalName === "string" &&
+    typeof draft.tradeName === "string" &&
+    typeof draft.document === "string" &&
+    typeof draft.street === "string" &&
+    typeof draft.neighborhood === "string" &&
+    typeof draft.number === "string" &&
+    typeof draft.cep === "string" &&
+    typeof draft.city === "string" &&
+    typeof draft.state === "string" &&
+    typeof draft.contact === "string" &&
+    typeof draft.email === "string"
   );
 }
