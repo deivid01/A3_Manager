@@ -5,36 +5,22 @@ import os from "node:os";
 import path from "node:path";
 import { collectProcessMemory } from "./process-memory.mjs";
 
-const executablePath = path.resolve(
-  process.argv[2] ?? "release/win-unpacked/A3 Manager.exe",
-);
-const outputDir = path.resolve(
-  process.argv[3] ?? "output/screenshots/after-0.1.5",
-);
-const userDataDir = fs.mkdtempSync(
-  path.join(os.tmpdir(), "a3-visual-validation-"),
-);
+const executablePath = path.resolve(process.argv[2] ?? "release/win-unpacked/A3 Manager.exe");
+const outputDir = path.resolve(process.argv[3] ?? "output/screenshots/after-0.1.6");
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "a3-visual-validation-"));
 const port = 9800 + Math.floor(Math.random() * 300);
-const viewports = [
-  { name: "1366x768", width: 1366, height: 768 },
-  { name: "1024x768", width: 1024, height: 768 },
-  { name: "768x768", width: 768, height: 768 },
-  { name: "390x844", width: 390, height: 844 },
-];
+const viewports = [{ name: "1366x768", width: 1366, height: 768 }, { name: "1024x768", width: 1024, height: 768 }, { name: "768x768", width: 768, height: 768 }, { name: "390x844", width: 390, height: 844 }];
 
 fs.mkdirSync(outputDir, { recursive: true });
 const childEnv = { ...process.env };
 delete childEnv.ELECTRON_RUN_AS_NODE;
-const appProcess = spawn(
-  executablePath,
-  [`--remote-debugging-port=${port}`, `--user-data-dir=${userDataDir}`],
-  { env: childEnv, stdio: "ignore", windowsHide: true },
-);
+const appProcess = spawn(executablePath, [`--remote-debugging-port=${port}`, `--user-data-dir=${userDataDir}`], { env: childEnv, stdio: "ignore", windowsHide: true });
 
 let socket;
 const pending = new Map();
 let nextId = 1;
 const screenshots = [];
+let activeTheme = "dark";
 let windowControls;
 let memoryAfterScreenshots;
 let receiverToggleAudit;
@@ -68,9 +54,16 @@ try {
   };
 
   await waitFor("Boolean(document.querySelector('.login-panel'))");
+  await setAppearance("dark");
   await captureMatrix("login");
+  activeTheme = "light";
+  await setAppearance("light");
+  await captureMatrix("login");
+  activeTheme = "dark";
+  await setAppearance("dark");
   await login();
   await waitFor("Boolean(document.querySelector('[data-screen=rentals]'))");
+  await setAppearance("dark");
   await captureMatrix("sidebar-expanded");
   await toggleSidebar();
   await captureMatrix("sidebar-collapsed");
@@ -140,6 +133,10 @@ try {
   await evaluate("document.querySelector('.rental-row .app-button').click()");
   await waitFor("Boolean(document.querySelector('.rental-detail-modal'))");
   await captureMatrix("rental-details", ".detail-money-total");
+  await closeModal(".rental-detail-modal");
+  activeTheme = "light";
+  await setAppearance("light");
+  await captureLightThemeMatrix();
   await wait(3000);
   memoryAfterScreenshots = collectProcessMemory(appProcess.pid);
 
@@ -150,12 +147,10 @@ try {
     windowControls,
     receiverToggleAudit,
     memoryAfterScreenshots,
+    themes: ["dark", "light"],
     screenshots,
   };
-  fs.writeFileSync(
-    path.join(outputDir, "manifest.json"),
-    JSON.stringify(manifest, null, 2),
-  );
+  fs.writeFileSync(path.join(outputDir, "manifest.json"), JSON.stringify(manifest, null, 2));
   console.log(JSON.stringify(manifest, null, 2));
 } finally {
   try {
@@ -297,6 +292,47 @@ async function setCreditPayment() {
   await wait(120);
 }
 
+async function setAppearance(mode) {
+  await evaluate(`(() => { const mode = ${JSON.stringify(mode)}; const resolved = mode === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : mode; localStorage.setItem('a3-manager:appearance', mode); document.documentElement.dataset.appearance = mode; document.documentElement.dataset.theme = resolved; document.documentElement.classList.toggle('dark', resolved === 'dark'); document.documentElement.style.colorScheme = resolved; const select = document.querySelector('.appearance-control select'); if (select && select.value !== mode) { select.value = mode; select.dispatchEvent(new Event('change', { bubbles: true })); } })()`);
+  await wait(240);
+}
+
+async function captureLightThemeMatrix() {
+  await ensureSidebarExpanded();
+  await captureMatrix("sidebar-expanded");
+  await toggleSidebar();
+  await captureMatrix("sidebar-collapsed");
+  await toggleSidebar();
+  await navigate("Relatórios");
+  await waitFor("Boolean(document.querySelector('[data-screen=rentals]'))");
+  await captureMatrix("reports-populated");
+  await captureCrudLightScreen("Clientes", "customers", "Novo cliente", ".customer-form-modal", "customer-form");
+  await captureCrudLightScreen("Equipamentos", "equipment", "Novo equipamento", ".equipment-form-modal", "equipment-form");
+  await navigate("Nova locação");
+  await waitFor("Boolean(document.querySelector('[data-screen=rental-launch]'))");
+  await captureMatrix("rental-launch");
+  await prepareRentalSelections();
+  await addEquipmentBySearch("Betoneira");
+  await captureMatrix("rental-launch-multiple-items");
+}
+
+async function captureCrudLightScreen(label, screen, actionLabel, modalSelector, modalScreen) {
+  await navigate(label);
+  await waitFor(`Boolean(document.querySelector('[data-screen=${screen}]'))`);
+  await captureMatrix(screen);
+  await clickButton(actionLabel);
+  await waitFor(`Boolean(document.querySelector('${modalSelector}'))`);
+  await captureMatrix(modalScreen);
+  await closeModal(modalSelector);
+}
+
+async function ensureSidebarExpanded() {
+  const collapsed = await evaluate("document.querySelector('.app-shell')?.classList.contains('sidebar-collapsed')");
+  if (collapsed) {
+    await toggleSidebar();
+  }
+}
+
 async function readRentalLaunchLayoutHealth(label) {
   return evaluate(`(() => {
     const view = document.querySelector('[data-screen=rental-launch]');
@@ -394,7 +430,7 @@ async function captureMatrix(screen, anchorSelector) {
       format: "png",
       captureBeyondViewport: false,
     });
-    const filename = `${screen}-${viewport.name}.png`;
+    const filename = `${activeTheme}-${screen}-${viewport.name}.png`;
     fs.writeFileSync(
       path.join(outputDir, filename),
       Buffer.from(response.data, "base64"),

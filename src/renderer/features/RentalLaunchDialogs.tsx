@@ -141,7 +141,7 @@ export function EquipmentSearchModal({ selectedIds, onClose, onSelect }: { selec
           return (
             <button disabled={equipment.stockQuantity <= 0 || selected} key={equipment.id} type="button" onClick={() => onSelect(equipment)}>
               <span className="result-icon"><PackagePlus size={18} /></span>
-              <div><strong>{equipment.name}</strong><span>{selected ? "Já adicionado" : `${equipment.stockQuantity} disponível${equipment.stockQuantity === 1 ? "" : "is"}`}</span></div>
+              <div><strong>{equipment.name}</strong><span>{selected ? "Já adicionado" : `${equipment.stockQuantity} ${equipment.stockQuantity === 1 ? "disponível" : "disponíveis"}`}</span></div>
               <Plus size={17} />
             </button>
           );

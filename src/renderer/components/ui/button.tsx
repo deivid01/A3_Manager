@@ -9,13 +9,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "border border-[#df980b] bg-[var(--brand-primary)] text-[var(--brand-ink)] shadow-[0_6px_14px_rgba(216,143,0,0.18)] hover:-translate-y-px hover:bg-[var(--brand-primary-hover)] hover:text-white",
+          "border border-[var(--button-primary-border)] bg-[var(--brand-primary)] text-[var(--brand-ink)] shadow-[var(--shadow-primary)] hover:-translate-y-px hover:bg-[var(--brand-primary-hover)]",
         secondary:
-          "border border-[#2a2c2a] bg-[#2a2c2a] text-white hover:-translate-y-px hover:bg-[#3a3d3a]",
+          "border border-[var(--button-secondary-border)] bg-[var(--button-secondary-bg)] text-[var(--button-secondary-text)] hover:-translate-y-px hover:bg-[var(--button-secondary-hover)]",
         ghost:
           "border border-[var(--border-subtle)] bg-[var(--surface-primary)] text-[var(--text-primary)] hover:-translate-y-px hover:bg-[var(--surface-hover)]",
         danger:
-          "border border-[var(--danger)] bg-[var(--danger)] text-white hover:-translate-y-px hover:bg-[#972f2a]",
+          "border border-[var(--danger)] bg-[var(--danger)] text-white hover:-translate-y-px hover:bg-[var(--button-danger-hover)]",
         icon:
           "border border-[var(--border-subtle)] bg-[var(--surface-primary)] text-[var(--text-secondary)] hover:-translate-y-px hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
       },

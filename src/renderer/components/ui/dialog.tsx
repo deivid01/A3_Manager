@@ -18,7 +18,7 @@ export const DialogOverlay = forwardRef<
   ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
-    className={cn("fixed inset-x-0 bottom-0 top-[38px] z-30 bg-[rgba(12,13,12,0.68)]", className)}
+    className={cn("fixed inset-x-0 bottom-0 top-[38px] z-30 bg-[var(--modal-backdrop)]", className)}
     ref={ref}
     {...props}
   />
@@ -33,7 +33,7 @@ export const DialogContent = forwardRef<
     <DialogOverlay />
     <DialogPrimitive.Content
       className={cn(
-        "fixed left-1/2 top-[calc(50%_+_19px)] z-40 grid max-h-[calc(100vh-82px)] w-[min(570px,calc(100vw-44px))] -translate-x-1/2 -translate-y-1/2 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-white/35 bg-[var(--surface-elevated)] shadow-[var(--shadow-lg)] focus:outline-none",
+        "fixed left-1/2 top-[calc(50%_+_19px)] z-40 grid max-h-[calc(100vh-82px)] w-[min(570px,calc(100vw-44px))] -translate-x-1/2 -translate-y-1/2 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-[var(--modal-border)] bg-[var(--surface-elevated)] shadow-[var(--shadow-lg)] focus:outline-none",
         wide && "w-[min(880px,calc(100vw-44px))]",
         className
       )}
@@ -59,7 +59,7 @@ export const DialogBody = ({ className, ...props }: HTMLAttributes<HTMLDivElemen
 
 export const DialogFooter = ({ className, ...props }: HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn("flex flex-wrap items-center justify-end gap-2 border-t border-[var(--border-subtle)] bg-[#faf9f5] px-5 py-[13px]", className)}
+    className={cn("flex flex-wrap items-center justify-end gap-2 border-t border-[var(--border-subtle)] bg-[var(--modal-footer-bg)] px-5 py-[13px]", className)}
     {...props}
   />
 );

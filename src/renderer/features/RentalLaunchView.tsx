@@ -105,8 +105,10 @@ export function RentalLaunchView() {
             onQuantityChange={changeQuantity}
             onRemove={(id) => setItems((current) => current.filter((item) => item.id !== id))}
           />
-          <PeriodAndPaymentSection form={form} returnDate={returnDate} onChange={setForm} />
+          <PeriodSection form={form} returnDate={returnDate} onChange={setForm} />
           <DeliverySection form={form} onChange={setForm} />
+          <ReceiverSection form={form} onChange={setForm} />
+          <PaymentSection form={form} onChange={setForm} />
         </div>
         <RentalReview
           customerName={customer?.name}
@@ -207,7 +209,7 @@ function SelectedEquipmentItem({
     <div className="selected-equipment">
       <div className="equipment-main">
         <strong>{item.name}</strong>
-        <span>{item.stockQuantity} disponível{item.stockQuantity === 1 ? "" : "is"}</span>
+        <span>{item.stockQuantity} {item.stockQuantity === 1 ? "disponível" : "disponíveis"}</span>
       </div>
       <div className="quantity-stepper" aria-label={`Quantidade de ${item.name}`}>
         <IconButton type="button" title="Diminuir quantidade" onClick={() => onQuantityChange(item.id, -1)} disabled={item.quantity <= 1}><Minus size={15} /></IconButton>
@@ -226,9 +228,9 @@ function SelectedEquipmentItem({
   );
 }
 
-function PeriodAndPaymentSection({ form, returnDate, onChange }: { form: RentalDraft; returnDate: string; onChange(form: RentalDraft): void }) {
+function PeriodSection({ form, returnDate, onChange }: { form: RentalDraft; returnDate: string; onChange(form: RentalDraft): void }) {
   return (
-    <SectionCard title="3. Período e pagamento" description="A devolução é calculada automaticamente a partir da data inicial.">
+    <SectionCard title="3. Período" description="A devolução é calculada automaticamente a partir da data inicial.">
       <div className="choice-group">
         <span className="field-label">Período da locação</span>
         <div className="choice-grid periods">
@@ -243,6 +245,13 @@ function PeriodAndPaymentSection({ form, returnDate, onChange }: { form: RentalD
         <Field label="Data de início" type="date" value={form.startDate} onChange={(event) => onChange({ ...form, startDate: event.target.value })} />
         <div className="return-date"><CalendarDays size={20} /><div><span>Devolução prevista</span><strong>{returnDate ? formatDate(returnDate) : "Selecione uma data"}</strong></div></div>
       </div>
+    </SectionCard>
+  );
+}
+
+function PaymentSection({ form, onChange }: { form: RentalDraft; onChange(form: RentalDraft): void }) {
+  return (
+    <SectionCard title="6. Pagamento">
       <div className="choice-group">
         <span className="field-label">Forma de pagamento</span>
         <div className="choice-grid payments">
@@ -264,10 +273,8 @@ function PeriodAndPaymentSection({ form, returnDate, onChange }: { form: RentalD
 }
 
 function DeliverySection({ form, onChange }: { form: RentalDraft; onChange(form: RentalDraft): void }) {
-  const receiverStateLabel = form.receiverIsCustomer ? "Sim" : "Não";
-
   return (
-    <SectionCard title="4. Entrega e recebedor">
+    <SectionCard title="4. Entrega">
       <div className="form-grid address">
         <Field className="span-two" label="Rua" value={form.deliveryStreet} onChange={(event) => onChange({ ...form, deliveryStreet: event.target.value })} />
         <Field label="Número" value={form.deliveryNumber} onChange={(event) => onChange({ ...form, deliveryNumber: event.target.value })} />
@@ -276,6 +283,15 @@ function DeliverySection({ form, onChange }: { form: RentalDraft; onChange(form:
         <Field label="Cidade" value={form.deliveryCity} onChange={(event) => onChange({ ...form, deliveryCity: event.target.value })} />
         <UfSelect allowEmpty value={form.deliveryState} onChange={(event) => onChange({ ...form, deliveryState: event.target.value as RentalLaunchInput["deliveryState"] })} />
       </div>
+    </SectionCard>
+  );
+}
+
+function ReceiverSection({ form, onChange }: { form: RentalDraft; onChange(form: RentalDraft): void }) {
+  const receiverStateLabel = form.receiverIsCustomer ? "Sim" : "Não";
+
+  return (
+    <SectionCard title="5. Recebedor">
       <div className="switch-row">
         <Switch
           checked={form.receiverIsCustomer}

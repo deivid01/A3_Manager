@@ -7,10 +7,10 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        success: "border-[#cce4db] bg-[var(--success-soft)] text-[var(--success)]",
-        warning: "border-[#efdcae] bg-[var(--warning-soft)] text-[var(--warning)]",
-        danger: "border-[#efc9c5] bg-[var(--danger-soft)] text-[var(--danger)]",
-        neutral: "border-[#dde0da] bg-[#eef0ed] text-[var(--text-secondary)]"
+        success: "border-[var(--success-border)] bg-[var(--success-soft)] text-[var(--success)]",
+        warning: "border-[var(--warning-border)] bg-[var(--warning-soft)] text-[var(--warning)]",
+        danger: "border-[var(--danger-border)] bg-[var(--danger-soft)] text-[var(--danger)]",
+        neutral: "border-[var(--neutral-border)] bg-[var(--neutral-soft)] text-[var(--text-secondary)]"
       }
     },
     defaultVariants: {

@@ -1,6 +1,6 @@
 {
   "name": "a3-manager",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Aplicativo desktop offline para gestão de locações da A3 Locação de Equipamentos para Construção.",
   "main": "dist/main/index.js",
   "author": "Deivid Peres",
@@ -18,7 +18,7 @@
     "build:renderer": "vite build",
     "build": "npm run typecheck && npm run lint && npm run test && npm run build:main && npm run build:renderer",
     "dist": "npm run build && electron-builder --win nsis portable --x64",
-    "validate:ui": "node scripts/capture-packaged-ui.mjs \"release/win-unpacked/A3 Manager.exe\" \"output/screenshots/after-0.1.5\"",
+    "validate:ui": "node scripts/capture-packaged-ui.mjs \"release/win-unpacked/A3 Manager.exe\" \"output/screenshots/after-0.1.6\"",
     "measure:memory": "node scripts/measure-packaged-memory.mjs \"release/win-unpacked/A3 Manager.exe\" clean",
     "migrate:postgres": "node scripts/migrate-sqlite-to-postgres.mjs"
   },

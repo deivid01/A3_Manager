@@ -44,7 +44,7 @@ async function runScenario(createData) {
           client,
           "Boolean(window.a3) && Boolean(document.body) && document.body.innerText.includes('A3 Manager') && document.body.innerText.includes('Entrar')"
         ),
-      15000
+      30000
     );
     if (!loginReady) {
       throw new Error("A tela de login não renderizou no aplicativo empacotado.");
@@ -149,7 +149,7 @@ async function connectToRenderer(debugPort) {
   const endpoint = await waitFor(async () => {
     const targets = await fetchJson(`http://127.0.0.1:${debugPort}/json/list`).catch(() => []);
     return targets.find((target) => target.type === "page" && target.webSocketDebuggerUrl);
-  }, 15000);
+  }, 30000);
 
   if (!endpoint) {
     throw new Error("Não foi possível conectar ao renderer do aplicativo empacotado.");

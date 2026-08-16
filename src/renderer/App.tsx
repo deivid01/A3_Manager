@@ -4,9 +4,12 @@ import {
   CalendarPlus,
   HardHat,
   LogOut,
+  Monitor,
+  Moon,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  Sun,
   UserCog,
   Users,
 } from "lucide-react";
@@ -28,6 +31,14 @@ import { LoginView } from "./features/LoginView";
 import { RentalLaunchView } from "./features/RentalLaunchView";
 import { RentalsView } from "./features/RentalsView";
 import { UsersView } from "./features/UsersView";
+import {
+  applyAppearance,
+  onSystemAppearanceChange,
+  persistAppearancePreference,
+  readAppearancePreference,
+  type AppearanceMode,
+  type ResolvedTheme,
+} from "./theme";
 
 type ViewKey =
   | "rentals"
@@ -54,6 +65,7 @@ const navItems: Array<{
 export function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>("rentals");
+  const appearance = useAppearance();
   const [appInfo, setAppInfo] = useState<AppInfo>({
     name: "A3 Manager",
     version: "",
@@ -78,7 +90,10 @@ export function App() {
             activeView={activeView}
             appInfo={appInfo}
             currentUser={currentUser}
+            appearanceMode={appearance.mode}
+            resolvedTheme={appearance.resolvedTheme}
             onNavigate={setActiveView}
+            onAppearanceChange={appearance.setMode}
             onLogout={() => setCurrentUser(null)}
           />
         )}
@@ -90,13 +105,19 @@ export function App() {
 function AuthenticatedShell({
   activeView,
   appInfo,
+  appearanceMode,
   currentUser,
+  resolvedTheme,
+  onAppearanceChange,
   onNavigate,
   onLogout,
 }: {
   activeView: ViewKey;
   appInfo: AppInfo;
+  appearanceMode: AppearanceMode;
   currentUser: User;
+  resolvedTheme: ResolvedTheme;
+  onAppearanceChange(mode: AppearanceMode): void;
   onNavigate(view: ViewKey): void;
   onLogout(): void;
 }) {
@@ -154,6 +175,11 @@ function AuthenticatedShell({
         </nav>
 
         <div className="sidebar-meta">
+          <AppearanceControl
+            mode={appearanceMode}
+            resolvedTheme={resolvedTheme}
+            onChange={onAppearanceChange}
+          />
           <button
             className="developer-credit"
             type="button"
@@ -201,3 +227,68 @@ function AuthenticatedShell({
     </TooltipProvider>
   );
 }
+
+function useAppearance() {
+  const [mode, setModeState] = useState<AppearanceMode>(() =>
+    readAppearancePreference(),
+  );
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
+    applyAppearance(readAppearancePreference()),
+  );
+
+  useEffect(() => {
+    setResolvedTheme(applyAppearance(mode));
+    persistAppearancePreference(mode);
+
+    if (mode !== "system") return undefined;
+    return onSystemAppearanceChange(() => setResolvedTheme(applyAppearance(mode)));
+  }, [mode]);
+
+  return {
+    mode,
+    resolvedTheme,
+    setMode: setModeState,
+  };
+}
+
+function AppearanceControl({
+  mode,
+  resolvedTheme,
+  onChange,
+}: {
+  mode: AppearanceMode;
+  resolvedTheme: ResolvedTheme;
+  onChange(mode: AppearanceMode): void;
+}) {
+  const Icon = mode === "system" ? Monitor : resolvedTheme === "dark" ? Moon : Sun;
+  const modeLabel = appearanceLabels[mode];
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <label className="appearance-control" title={`Aparência: ${modeLabel}`}>
+          <span className="appearance-control-label">
+            <Icon size={17} />
+            <span>Aparência</span>
+          </span>
+          <select
+            aria-label="Aparência"
+            value={mode}
+            onChange={(event) => onChange(event.target.value as AppearanceMode)}
+          >
+            <option value="system">Sistema</option>
+            <option value="dark">Escuro</option>
+            <option value="light">Claro</option>
+          </select>
+        </label>
+      </TooltipTrigger>
+      <TooltipContent side="right">Aparência: {modeLabel}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+const appearanceLabels: Record<AppearanceMode, string> = {
+  system: "Sistema",
+  dark: "Escuro",
+  light: "Claro",
+};

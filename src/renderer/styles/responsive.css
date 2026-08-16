@@ -37,8 +37,11 @@
 
 @media (max-width: 760px) {
   .desktop-window { grid-template-rows: 38px minmax(0, 1fr); }
+  .login-card { grid-template-columns: 1fr; max-width: 440px; min-height: 0; }
+  .login-brand-field { display: none; }
+  .login-panel { padding: 32px 26px 22px; }
   .app-shell { display: block; height: 100%; }
-  .sidebar { border-right: 0; border-top: 1px solid #373937; bottom: 0; height: 70px; left: 0; padding: 5px 6px; position: fixed; right: 0; top: auto; z-index: 20; }
+  .sidebar { border-right: 0; border-top: 1px solid var(--sidebar-border); bottom: 0; height: 70px; left: 0; padding: 5px 6px; position: fixed; right: 0; top: auto; z-index: 20; }
   .sidebar-brand, .sidebar-meta, .nav-label { display: none; }
   .sidebar nav { display: flex; gap: 1px; overflow: hidden; }
   .nav-button { flex: 1 1 60px; flex-direction: column; gap: 3px; justify-content: center; min-height: 58px; min-width: 60px; padding: 4px 1px; }
@@ -78,8 +81,8 @@
   .data-table { display: block; min-width: 0; }
   .data-table thead { display: none; }
   .data-table tbody { display: grid; gap: 10px; padding: 10px; }
-  .data-table tr { background: #faf9f5; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); display: grid; padding: 8px 11px; }
-  .data-table td { align-items: center; border-bottom: 1px solid #e5e6e1; display: flex; gap: 16px; justify-content: space-between; min-height: 39px; padding: 7px 0; text-align: right; }
+  .data-table tr { background: var(--table-mobile-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); display: grid; padding: 8px 11px; }
+  .data-table td { align-items: center; border-bottom: 1px solid var(--table-row-border); display: flex; gap: 16px; justify-content: space-between; min-height: 39px; padding: 7px 0; text-align: right; }
   .data-table td:last-child { border-bottom: 0; }
   .data-table td::before { color: var(--text-muted); content: attr(data-label); font-size: 9px; font-weight: 750; text-transform: uppercase; }
   .row-actions { display: flex !important; }
@@ -89,7 +92,6 @@
   .window-title span { display: none; }
   .window-actions button { width: 42px; }
   .login-screen { padding: 16px; }
-  .login-brand-field { display: none; }
   .login-panel { gap: 18px; margin-left: 0; padding: 22px 20px 17px; }
   .login-logo-stage { height: 68px; margin-bottom: 14px; width: 118px; }
   .login-header h1 { font-size: 26px; }

@@ -41,8 +41,13 @@ export function LoginView({
 
   return (
     <main className="login-screen">
-      <section className="login-panel">
+      <section className="login-card">
+        <div className="login-brand-field" aria-hidden="true">
+          <img src={`${import.meta.env.BASE_URL}logo-A3.jpg`} alt="" />
+        </div>
+        <section className="login-panel">
         <header className="login-header">
+          <span className="login-kicker">Bem-vindo</span>
           <div className="login-logo-stage">
             <img
               src={`${import.meta.env.BASE_URL}logo-A3.jpg`}
@@ -112,6 +117,7 @@ export function LoginView({
             Feito por Deivid Peres
           </button>
         </footer>
+        </section>
       </section>
     </main>
   );
