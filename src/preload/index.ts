@@ -30,6 +30,12 @@ const ipcChannels = {
   finalizeRental: "rentals:finalize",
   saveRentalPdf: "rentals:save-pdf",
   printRental: "rentals:print",
+  getSyncStatus: "sync:get-status",
+  syncStatusChanged: "sync:status-changed",
+  getA20sConfig: "sync:get-a20s-config",
+  saveA20sConfig: "sync:save-a20s-config",
+  testA20sConnection: "sync:test-a20s-connection",
+  syncNow: "sync:now",
 } as const;
 
 type IpcResult<T> =
@@ -82,6 +88,19 @@ const api: A3Api = {
   finalizeRental: (id) => call(ipcChannels.finalizeRental, id),
   saveRentalPdf: (id) => call(ipcChannels.saveRentalPdf, id),
   printRental: (id) => call(ipcChannels.printRental, id),
+  getSyncStatus: () => call(ipcChannels.getSyncStatus),
+  onSyncStatusChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: unknown) =>
+      listener(status as Awaited<ReturnType<A3Api["getSyncStatus"]>>);
+    ipcRenderer.on(ipcChannels.syncStatusChanged, handler);
+    return () =>
+      ipcRenderer.removeListener(ipcChannels.syncStatusChanged, handler);
+  },
+  getA20sConfig: () => call(ipcChannels.getA20sConfig),
+  saveA20sConfig: (input) => call(ipcChannels.saveA20sConfig, input),
+  testA20sConnection: (input) =>
+    call(ipcChannels.testA20sConnection, input),
+  syncNow: () => call(ipcChannels.syncNow),
 };
 
 contextBridge.exposeInMainWorld("a3", api);

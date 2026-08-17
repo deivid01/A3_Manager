@@ -1,6 +1,6 @@
 {
   "name": "a3-manager",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Aplicativo desktop offline para gestão de locações da A3 Locação de Equipamentos para Construção.",
   "main": "dist/main/index.js",
   "author": "Deivid Peres",

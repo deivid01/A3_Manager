@@ -18,6 +18,7 @@ export class SqlJsDatabase {
   ) {}
 
   private transactionDepth = 0;
+  private outboxSuppressionDepth = 0;
 
   static async open(filePath: string): Promise<SqlJsDatabase> {
     const wasmPath = resolveWasmPath();
@@ -28,6 +29,7 @@ export class SqlJsDatabase {
     const store = new SqlJsDatabase(sql, database, filePath);
     store.db.run("PRAGMA foreign_keys = ON;");
     store.migrate();
+    store.resetOutboxSuppressionFlag();
     return store;
   }
 
@@ -62,6 +64,13 @@ export class SqlJsDatabase {
     }
   }
 
+  executeScript(sql: string): void {
+    this.db.run(sql);
+    if (this.transactionDepth === 0) {
+      this.persist();
+    }
+  }
+
   transaction<T>(operation: () => T): T {
     this.db.run("BEGIN IMMEDIATE;");
     this.transactionDepth += 1;
@@ -80,6 +89,35 @@ export class SqlJsDatabase {
 
   exportBytes(): Uint8Array {
     return this.db.export();
+  }
+
+  getFilePath(): string {
+    return this.filePath;
+  }
+
+  createBackup(label: string): string {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const backupsDir = path.join(path.dirname(this.filePath), "backups");
+    const backupPath = path.join(backupsDir, `${label}-${timestamp}.sqlite`);
+    fs.mkdirSync(backupsDir, { recursive: true });
+    fs.writeFileSync(backupPath, Buffer.from(this.db.export()));
+    return backupPath;
+  }
+
+  withOutboxSuppressed<T>(operation: () => T): T {
+    this.outboxSuppressionDepth += 1;
+    if (this.outboxSuppressionDepth === 1) {
+      this.setOutboxSuppressionFlag(true);
+    }
+
+    try {
+      return operation();
+    } finally {
+      this.outboxSuppressionDepth -= 1;
+      if (this.outboxSuppressionDepth === 0) {
+        this.setOutboxSuppressionFlag(false);
+      }
+    }
   }
 
   close(): void {
@@ -113,6 +151,28 @@ export class SqlJsDatabase {
     }
 
     this.persist();
+  }
+
+  private setOutboxSuppressionFlag(suppressed: boolean): void {
+    this.db.run(
+      `INSERT INTO sync_runtime_flags (key, value)
+       VALUES ('suppress_outbox', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [suppressed ? "1" : "0"]
+    );
+    if (this.transactionDepth === 0) {
+      this.persist();
+    }
+  }
+
+  private resetOutboxSuppressionFlag(): void {
+    const table = this.queryOne(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'sync_runtime_flags'"
+    );
+    if (!table) {
+      return;
+    }
+    this.setOutboxSuppressionFlag(false);
   }
 
   private persist(): void {

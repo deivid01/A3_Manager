@@ -158,6 +158,55 @@ export interface AppInfo {
   developerUrl: string;
 }
 
+export const a20sSyncConfigSchema = z.object({
+  baseUrl: z
+    .string()
+    .trim()
+    .url("Informe uma URL válida para o servidor A20s."),
+  database: z
+    .string()
+    .trim()
+    .regex(
+      /^[A-Za-z0-9_-]+$/,
+      "Use apenas letras, números, hífen ou underscore no nome do banco.",
+    ),
+  token: z.string().optional().default(""),
+});
+export type A20sSyncConfigInput = z.infer<typeof a20sSyncConfigSchema>;
+
+export interface A20sSyncPublicConfig {
+  baseUrl: string;
+  database: string;
+  tokenConfigured: boolean;
+}
+
+export type SyncConnectionState =
+  | "not_configured"
+  | "online"
+  | "syncing"
+  | "offline"
+  | "pending"
+  | "error";
+
+export interface SyncStatus {
+  state: SyncConnectionState;
+  baseUrl: string;
+  database: string;
+  pendingCount: number;
+  lastSuccessfulSyncAt: string | null;
+  lastAttemptAt: string | null;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+}
+
+export interface SyncTestResult {
+  ok: boolean;
+  health: boolean;
+  authenticated: boolean;
+  databaseFound: boolean;
+  message: string;
+}
+
 export interface A3Api {
   appInfo(): Promise<AppInfo>;
   openExternal(url: string): Promise<void>;
@@ -187,6 +236,12 @@ export interface A3Api {
   finalizeRental(id: string): Promise<RentalDetail>;
   saveRentalPdf(id: string): Promise<string | null>;
   printRental(id: string): Promise<void>;
+  getSyncStatus(): Promise<SyncStatus>;
+  onSyncStatusChanged(listener: (status: SyncStatus) => void): () => void;
+  getA20sConfig(): Promise<A20sSyncPublicConfig>;
+  saveA20sConfig(input: A20sSyncConfigInput): Promise<A20sSyncPublicConfig>;
+  testA20sConnection(input: A20sSyncConfigInput): Promise<SyncTestResult>;
+  syncNow(): Promise<SyncStatus>;
 }
 
 export type EntityKind =

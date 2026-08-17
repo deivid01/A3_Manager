@@ -27,4 +27,10 @@ export const ipcChannels = {
   finalizeRental: "rentals:finalize",
   saveRentalPdf: "rentals:save-pdf",
   printRental: "rentals:print",
+  getSyncStatus: "sync:get-status",
+  syncStatusChanged: "sync:status-changed",
+  getA20sConfig: "sync:get-a20s-config",
+  saveA20sConfig: "sync:save-a20s-config",
+  testA20sConnection: "sync:test-a20s-connection",
+  syncNow: "sync:now",
 } as const;

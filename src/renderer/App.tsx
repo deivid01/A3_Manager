@@ -2,13 +2,17 @@ import {
   BarChart3,
   Building2,
   CalendarPlus,
+  Cloud,
+  CloudOff,
   HardHat,
+  Loader2,
   LogOut,
   Monitor,
   Moon,
   Package,
   PanelLeftClose,
   PanelLeftOpen,
+  TriangleAlert,
   Sun,
   UserCog,
   Users,
@@ -16,7 +20,7 @@ import {
 import { useEffect, useState } from "react";
 import type { User } from "../domain/types";
 import { roleLabels } from "../domain/labels";
-import type { AppInfo } from "../shared/contracts";
+import type { AppInfo, SyncStatus } from "../shared/contracts";
 import { WindowTitlebar } from "./components/WindowTitlebar";
 import {
   Tooltip,
@@ -129,6 +133,7 @@ function AuthenticatedShell({
   onLogout(): void;
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const syncStatus = useSyncStatus();
   const visibleNav = navItems.filter(
     (item) => !item.adminOnly || currentUser.role === "ADMIN",
   );
@@ -182,6 +187,7 @@ function AuthenticatedShell({
         </nav>
 
         <div className="sidebar-meta">
+          <SyncStatusIndicator status={syncStatus} collapsed={sidebarCollapsed} />
           <AppearanceControl
             mode={appearanceMode}
             resolvedTheme={resolvedTheme}
@@ -222,6 +228,10 @@ function AuthenticatedShell({
         </div>
       </aside>
 
+      <div className="mobile-sync-status">
+        <SyncStatusIndicator status={syncStatus} collapsed={false} />
+      </div>
+
       <main className="workspace" data-active-view={activeView}>
         {activeView === "rentals" && <RentalsView />}
         {activeView === "launch" && <RentalLaunchView draftUserId={currentUser.id} />}
@@ -233,6 +243,104 @@ function AuthenticatedShell({
     </div>
     </TooltipProvider>
   );
+}
+
+function useSyncStatus(): SyncStatus | null {
+  const [status, setStatus] = useState<SyncStatus | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    window.a3
+      .getSyncStatus()
+      .then((loaded) => {
+        if (active) setStatus(loaded);
+      })
+      .catch(() => undefined);
+    const dispose = window.a3.onSyncStatusChanged((next) => {
+      if (active) setStatus(next);
+    });
+    return () => {
+      active = false;
+      dispose();
+    };
+  }, []);
+
+  return status;
+}
+
+function SyncStatusIndicator({
+  status,
+  collapsed,
+}: {
+  status: SyncStatus | null;
+  collapsed: boolean;
+}) {
+  const meta = syncStatusMeta(status);
+  const Icon = meta.icon;
+  const pending =
+    status?.pendingCount && status.pendingCount > 0
+      ? `${status.pendingCount} pendente${status.pendingCount === 1 ? "" : "s"}`
+      : null;
+  const detail =
+    pending ??
+    (status?.lastSuccessfulSyncAt
+      ? `Última sync ${formatSyncTime(status.lastSuccessfulSyncAt)}`
+      : status?.database ?? "a3_manager");
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className={`sync-status ${meta.kind}`} title={meta.label}>
+          <Icon size={17} className={meta.spin ? "sync-spin" : ""} />
+          <div className="sync-status-copy">
+            <strong>{meta.label}</strong>
+            <span>{detail}</span>
+          </div>
+        </div>
+      </TooltipTrigger>
+      {collapsed && (
+        <TooltipContent side="right">
+          {meta.label}
+          {pending ? ` · ${pending}` : ""}
+        </TooltipContent>
+      )}
+    </Tooltip>
+  );
+}
+
+function syncStatusMeta(status: SyncStatus | null): {
+  label: string;
+  kind: "success" | "warning" | "danger" | "neutral";
+  icon: typeof Cloud;
+  spin?: boolean;
+} {
+  if (!status) {
+    return { label: "Sincronização", kind: "neutral", icon: CloudOff };
+  }
+
+  if (status.state === "syncing") {
+    return { label: "Sincronizando", kind: "warning", icon: Loader2, spin: true };
+  }
+  if (status.state === "online") {
+    return { label: "Online", kind: "success", icon: Cloud };
+  }
+  if (status.state === "pending") {
+    return { label: "Alterações pendentes", kind: "warning", icon: Loader2 };
+  }
+  if (status.state === "offline") {
+    return { label: "Offline", kind: "neutral", icon: CloudOff };
+  }
+  if (status.state === "not_configured") {
+    return { label: "A20s não configurado", kind: "neutral", icon: CloudOff };
+  }
+  return { label: "Erro de sincronização", kind: "danger", icon: TriangleAlert };
+}
+
+function formatSyncTime(value: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function useAppearance() {

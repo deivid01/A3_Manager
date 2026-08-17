@@ -132,6 +132,6 @@ describe("integridade transacional de locações", () => {
     expect(columns).toContain("client_request_id");
     expect(rental?.code).toBe("LOC-20260814-0001");
     expect(rental?.client_request_id).toBeNull();
-    expect(applied.map((row) => Number(row.id))).toEqual([1, 2]);
+    expect(applied.map((row) => Number(row.id))).toEqual([1, 2, 3]);
   });
 });
