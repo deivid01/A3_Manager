@@ -43,6 +43,10 @@
   .app-shell { display: block; height: 100%; }
   .sidebar { border-right: 0; border-top: 1px solid var(--sidebar-border); bottom: 0; height: 70px; left: 0; padding: 5px 6px; position: fixed; right: 0; top: auto; z-index: 20; }
   .sidebar-brand, .sidebar-meta, .nav-label { display: none; }
+  .mobile-sync-status { display: block; position: fixed; right: 12px; top: 48px; z-index: 22; }
+  .mobile-sync-status .sync-status { background: var(--surface-elevated); border-color: var(--border-subtle); box-shadow: var(--shadow-sm); gap: 6px; grid-template-columns: 18px minmax(0, auto); min-height: 32px; padding: 6px 9px; }
+  .mobile-sync-status .sync-status-copy strong { color: var(--text-primary); font-size: 10px; max-width: 132px; }
+  .mobile-sync-status .sync-status-copy span { display: none; }
   .sidebar nav { display: flex; gap: 1px; overflow: hidden; }
   .nav-button { flex: 1 1 60px; flex-direction: column; gap: 3px; justify-content: center; min-height: 58px; min-width: 60px; padding: 4px 1px; }
   .nav-button::before { bottom: -1px; height: 3px; left: 50%; top: auto; transform: translateX(-50%); width: 28px; }

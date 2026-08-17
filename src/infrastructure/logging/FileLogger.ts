@@ -46,6 +46,8 @@ export function sanitizeLogMessage(value: string): string {
     .replace(seedPasswordPattern, "[REDACTED]")
     .replace(databaseUrlPattern, "database-url=[REDACTED]")
     .replace(postgresUrlPattern, "database-url=[REDACTED]")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]")
+    .replace(/token["']?\s*[:=]\s*["']?[^"',\s}]+/gi, "token=[REDACTED]")
     .replace(/password["']?\s*[:=]\s*["']?[^"',\s}]+/gi, "password=[REDACTED]")
     .replace(/senha["']?\s*[:=]\s*["']?[^"',\s}]+/gi, "senha=[REDACTED]");
 }

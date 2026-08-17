@@ -7,7 +7,16 @@ export type AppErrorCode =
   | "INSUFFICIENT_STOCK"
   | "RENTAL_ALREADY_FINALIZED"
   | "DATABASE_ERROR"
-  | "PDF_ERROR";
+  | "PDF_ERROR"
+  | "A3-SYNC-001"
+  | "A3-SYNC-002"
+  | "A3-SYNC-003"
+  | "A3-SYNC-004"
+  | "A3-SYNC-005"
+  | "A3-SYNC-006"
+  | "A3-SYNC-007"
+  | "A3-SYNC-008"
+  | "A3-SYNC-009";
 
 export class AppError extends Error {
   constructor(

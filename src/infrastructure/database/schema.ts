@@ -150,5 +150,208 @@ export const migrations: Migration[] = [
         ON rentals(client_request_id)
         WHERE client_request_id IS NOT NULL;
     `
+  },
+  {
+    id: 3,
+    name: "local_sync_outbox",
+    sql: `
+      CREATE TABLE IF NOT EXISTS sync_outbox (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id TEXT NOT NULL UNIQUE,
+        table_name TEXT NOT NULL,
+        row_id TEXT NOT NULL,
+        operation TEXT NOT NULL CHECK (operation IN ('INSERT', 'UPDATE', 'DELETE')),
+        created_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS sync_state (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS sync_runtime_flags (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+
+      INSERT OR IGNORE INTO sync_runtime_flags (key, value)
+      VALUES ('suppress_outbox', '0');
+
+      CREATE INDEX IF NOT EXISTS idx_sync_outbox_created_at
+        ON sync_outbox(created_at, id);
+      CREATE INDEX IF NOT EXISTS idx_sync_outbox_table_row
+        ON sync_outbox(table_name, row_id);
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_users_insert
+      AFTER INSERT ON users
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'users', NEW.id, 'INSERT', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_users_update
+      AFTER UPDATE ON users
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'users', NEW.id, 'UPDATE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_users_delete
+      AFTER DELETE ON users
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'users', OLD.id, 'DELETE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_company_settings_insert
+      AFTER INSERT ON company_settings
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'company_settings', NEW.id, 'INSERT', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_company_settings_update
+      AFTER UPDATE ON company_settings
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'company_settings', NEW.id, 'UPDATE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_company_settings_delete
+      AFTER DELETE ON company_settings
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'company_settings', OLD.id, 'DELETE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_customers_insert
+      AFTER INSERT ON customers
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'customers', NEW.id, 'INSERT', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_customers_update
+      AFTER UPDATE ON customers
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'customers', NEW.id, 'UPDATE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_customers_delete
+      AFTER DELETE ON customers
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'customers', OLD.id, 'DELETE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_equipment_insert
+      AFTER INSERT ON equipment
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'equipment', NEW.id, 'INSERT', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_equipment_update
+      AFTER UPDATE ON equipment
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'equipment', NEW.id, 'UPDATE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_equipment_delete
+      AFTER DELETE ON equipment
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'equipment', OLD.id, 'DELETE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_rentals_insert
+      AFTER INSERT ON rentals
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'rentals', NEW.id, 'INSERT', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_rentals_update
+      AFTER UPDATE ON rentals
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'rentals', NEW.id, 'UPDATE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_rentals_delete
+      AFTER DELETE ON rentals
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'rentals', OLD.id, 'DELETE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_rental_items_insert
+      AFTER INSERT ON rental_items
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'rental_items', NEW.id, 'INSERT', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_rental_items_update
+      AFTER UPDATE ON rental_items
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'rental_items', NEW.id, 'UPDATE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_rental_items_delete
+      AFTER DELETE ON rental_items
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'rental_items', OLD.id, 'DELETE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_inventory_movements_insert
+      AFTER INSERT ON inventory_movements
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'inventory_movements', NEW.id, 'INSERT', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_inventory_movements_update
+      AFTER UPDATE ON inventory_movements
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'inventory_movements', NEW.id, 'UPDATE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_inventory_movements_delete
+      AFTER DELETE ON inventory_movements
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'inventory_movements', OLD.id, 'DELETE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+    `
   }
 ];
