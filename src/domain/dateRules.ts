@@ -34,12 +34,6 @@ export function calculateReturnDate(startDate: string, period: RentalPeriod): st
       return addDays(startDate, 15);
     case "MONTHLY":
       return addMonths(startDate, 1);
-    case "QUARTERLY":
-      return addMonths(startDate, 3);
-    case "SEMIANNUAL":
-      return addMonths(startDate, 6);
-    case "ANNUAL":
-      return addMonths(startDate, 12);
     default:
       return exhaustivePeriod(period);
   }

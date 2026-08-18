@@ -18,6 +18,7 @@ import type {
   RentalFilters,
   RentalLaunchInput,
   UserInput,
+  UserUpdateInput,
 } from "../shared/contracts";
 import { AuthApplicationService } from "./services/AuthApplicationService";
 import { CompanyApplicationService } from "./services/CompanyApplicationService";
@@ -53,6 +54,9 @@ export class ApplicationService {
   }
   createUser(input: UserInput): Promise<User> {
     return this.auth.createUser(input);
+  }
+  updateUser(id: string, input: UserUpdateInput): Promise<User> {
+    return this.auth.updateUser(id, input);
   }
   getCompany(): CompanySettings {
     return this.company.get();
@@ -101,5 +105,11 @@ export class ApplicationService {
   }
   finalizeRental(id: string): RentalDetail {
     return this.rentals.finalize(id);
+  }
+  archiveRental(id: string, userId: string): RentalDetail {
+    return this.rentals.archive(id, userId);
+  }
+  unarchiveRental(id: string): RentalDetail {
+    return this.rentals.unarchive(id);
   }
 }

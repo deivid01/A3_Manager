@@ -43,6 +43,12 @@ export function buildRentalWhere(filters: RentalFilters): {
   const clauses: string[] = [];
   const params: DbParam[] = [];
 
+  if (filters.archiveStatus === "ARCHIVED") {
+    clauses.push("r.archived_at IS NOT NULL");
+  } else if (filters.archiveStatus !== "ALL") {
+    clauses.push("r.archived_at IS NULL");
+  }
+
   if (filters.status && filters.status !== "ALL") {
     clauses.push("r.status = ?");
     params.push(filters.status);

@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   applyDeliveryAddress,
+  buildSelectedRentalItem,
   buildInitialRentalForm,
   buildRentalLaunchForm,
   customerDeliveryAddress,
   isMeaningfulRentalDraft,
+  recalculateSelectedRentalItemsForPeriod,
   updateManualDeliveryAddress,
   type RentalLaunchStoredDraft,
 } from "../src/renderer/features/rentalLaunchState";
-import type { CustomerSearchResult } from "../src/domain/types";
+import type { CustomerSearchResult, EquipmentSearchResult } from "../src/domain/types";
 
 const customer: CustomerSearchResult = {
   id: "customer-1",
@@ -21,6 +23,17 @@ const customer: CustomerSearchResult = {
   city: "São Paulo",
   state: "SP",
   contact: "(11) 99999-0000",
+};
+
+const equipment: EquipmentSearchResult = {
+  id: "equipment-1",
+  name: "Betoneira 400L",
+  stockQuantity: 5,
+  dailyRateCents: 10000,
+  weeklyRateCents: 15000,
+  biweeklyRateCents: 22000,
+  monthlyRateCents: 28000,
+  unitIndemnificationValueCents: 20000,
 };
 
 describe("estado da Nova Locação", () => {
@@ -67,5 +80,17 @@ describe("estado da Nova Locação", () => {
     };
 
     expect(isMeaningfulRentalDraft(draft, "2026-08-16")).toBe(true);
+  });
+
+  it("recalcula o valor unitário da locação ao trocar o período", () => {
+    const selected = buildSelectedRentalItem(equipment, "DAILY");
+
+    const [weekly] = recalculateSelectedRentalItemsForPeriod([selected], "WEEKLY");
+    const [monthly] = recalculateSelectedRentalItemsForPeriod([selected], "MONTHLY");
+
+    expect(selected.unitRentalRateCents).toBe(10000);
+    expect(weekly?.unitRentalRateCents).toBe(15000);
+    expect(monthly?.unitRentalRateCents).toBe(28000);
+    expect(monthly?.unitIndemnificationValueCents).toBe(20000);
   });
 });

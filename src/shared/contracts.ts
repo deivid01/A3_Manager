@@ -15,6 +15,7 @@ import type {
   PagedResult,
   PaymentMethod,
   RentalDetail,
+  RentalArchiveFilter,
   RentalListItem,
   RentalPeriod,
   RentalStatus,
@@ -50,6 +51,20 @@ export const userInputSchema = z.object({
 });
 export type UserInput = z.infer<typeof userInputSchema>;
 
+export const userUpdateInputSchema = z.object({
+  username: requiredText,
+  password: z
+    .string()
+    .default("")
+    .refine(
+      (value) => value === "" || value.length >= 6,
+      "A nova senha deve ter pelo menos 6 caracteres.",
+    ),
+  role: z.enum(USER_ROLES),
+  active: z.boolean(),
+});
+export type UserUpdateInput = z.infer<typeof userUpdateInputSchema>;
+
 export const customerInputSchema = z.object({
   name: requiredText,
   cpf: cpfField,
@@ -66,7 +81,10 @@ export type CustomerInput = z.infer<typeof customerInputSchema>;
 
 export const equipmentInputSchema = z.object({
   name: requiredText,
-  equipmentValueCents: z.number().int().nonnegative(),
+  dailyRateCents: z.number().int().nonnegative(),
+  weeklyRateCents: z.number().int().nonnegative(),
+  biweeklyRateCents: z.number().int().nonnegative(),
+  monthlyRateCents: z.number().int().nonnegative(),
   unitIndemnificationValueCents: z.number().int().nonnegative(),
   stockQuantity: z.number().int().nonnegative(),
 });
@@ -144,6 +162,7 @@ export type RentalLaunchInput = z.infer<typeof rentalLaunchSchema>;
 
 export interface RentalFilters {
   status?: RentalStatus | "ALL";
+  archiveStatus?: RentalArchiveFilter;
   code?: string;
   customerName?: string;
   startDate?: string;
@@ -162,7 +181,7 @@ export const a20sSyncConfigSchema = z.object({
   baseUrl: z
     .string()
     .trim()
-    .url("Informe uma URL válida para o servidor A20s."),
+    .url("Informe uma URL válida para o servidor remoto."),
   database: z
     .string()
     .trim()
@@ -179,6 +198,8 @@ export interface A20sSyncPublicConfig {
   database: string;
   tokenConfigured: boolean;
 }
+
+export type RentalPrintOrigin = "launch" | "report";
 
 export type SyncConnectionState =
   | "not_configured"
@@ -218,6 +239,7 @@ export interface A3Api {
   login(input: LoginInput): Promise<User>;
   listUsers(): Promise<User[]>;
   createUser(input: UserInput): Promise<User>;
+  updateUser(id: string, input: UserUpdateInput): Promise<User>;
   getCompany(): Promise<CompanySettings>;
   saveCompany(input: CompanyInput): Promise<CompanySettings>;
   listCustomers(search: string): Promise<Customer[]>;
@@ -234,8 +256,10 @@ export interface A3Api {
   listRentals(filters: RentalFilters): Promise<PagedResult<RentalListItem>>;
   getRental(id: string): Promise<RentalDetail>;
   finalizeRental(id: string): Promise<RentalDetail>;
+  archiveRental(id: string): Promise<RentalDetail>;
+  unarchiveRental(id: string): Promise<RentalDetail>;
   saveRentalPdf(id: string): Promise<string | null>;
-  printRental(id: string): Promise<void>;
+  printRental(id: string, origin?: RentalPrintOrigin): Promise<void>;
   getSyncStatus(): Promise<SyncStatus>;
   onSyncStatusChanged(listener: (status: SyncStatus) => void): () => void;
   getA20sConfig(): Promise<A20sSyncPublicConfig>;

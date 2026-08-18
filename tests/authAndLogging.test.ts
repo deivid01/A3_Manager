@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { assertAdminOperationAllowed } from "../src/application/authorization";
 import { verifyPassword } from "../src/application/security";
 import { normalizeUsernameDraft } from "../src/domain/normalization";
 import { sanitizeLogMessage } from "../src/infrastructure/logging/FileLogger";
@@ -23,6 +24,77 @@ describe("autenticação e logs", () => {
     await expect(
       service.createUser({ username: " OPERADOR ", password: "outrasenha", role: "USER" })
     ).rejects.toMatchObject({ code: "DUPLICATE" });
+  });
+
+  it("edita usuário preservando senha quando o campo de nova senha fica vazio", async () => {
+    const { service } = await createTestService();
+    const created = await service.createUser({
+      username: "operador",
+      password: "senha123",
+      role: "USER",
+    });
+
+    const updated = await service.updateUser(created.id, {
+      username: "operador editado",
+      password: "",
+      role: "ADMIN",
+      active: true,
+    });
+
+    expect(updated).toMatchObject({
+      username: "OPERADOR EDITADO",
+      role: "ADMIN",
+      active: true,
+    });
+    await expect(
+      service.login({ username: "operador editado", password: "senha123" }),
+    ).resolves.toMatchObject({ id: created.id });
+
+    await service.updateUser(created.id, {
+      username: "operador editado",
+      password: "novaSenha123",
+      role: "USER",
+      active: true,
+    });
+
+    await expect(
+      service.login({ username: "operador editado", password: "senha123" }),
+    ).rejects.toMatchObject({ code: "AUTH_INVALID" });
+    await expect(
+      service.login({ username: "operador editado", password: "novaSenha123" }),
+    ).resolves.toMatchObject({ role: "USER" });
+  });
+
+  it("impede remover o último administrador ativo", async () => {
+    const { service } = await createTestService();
+    const admin = service.listUsers().find((user) => user.role === "ADMIN" && user.active);
+
+    expect(admin).toBeDefined();
+    if (!admin) {
+      throw new Error("Administrador inicial não encontrado.");
+    }
+    await expect(
+      service.updateUser(admin.id, {
+        username: admin.username,
+        password: "",
+        role: "USER",
+        active: true,
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(
+      service.updateUser(admin.id, {
+        username: admin.username,
+        password: "",
+        role: "ADMIN",
+        active: false,
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it("restringe gerenciamento de usuários e configuração remota a administradores", () => {
+    expect(() => assertAdminOperationAllowed({ role: "ADMIN" }, "user-management")).not.toThrow();
+    expect(() => assertAdminOperationAllowed({ role: "USER" }, "user-management")).toThrow();
+    expect(() => assertAdminOperationAllowed({ role: "USER" }, "server-configuration")).toThrow();
   });
 
   it("preserva espaços durante digitação e normaliza usuário com nome composto no envio", async () => {

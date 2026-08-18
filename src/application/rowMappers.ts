@@ -61,7 +61,10 @@ export function mapEquipment(row: DbRow): Equipment {
   return {
     id: asText(row.id),
     name: asText(row.name),
-    equipmentValueCents: asNumber(row.equipment_value_cents),
+    dailyRateCents: asNumber(row.daily_rate_cents),
+    weeklyRateCents: asNumber(row.weekly_rate_cents),
+    biweeklyRateCents: asNumber(row.biweekly_rate_cents),
+    monthlyRateCents: asNumber(row.monthly_rate_cents),
     unitIndemnificationValueCents: asNumber(row.unit_indemnification_value_cents),
     stockQuantity: asNumber(row.stock_quantity),
     archivedAt: nullableText(row.archived_at),
@@ -96,6 +99,8 @@ export function mapRental(row: DbRow): Rental {
     companySnapshot: JSON.parse(asText(row.company_snapshot_json)) as Rental["companySnapshot"],
     launchedByUsername: asText(row.launched_by_username),
     finalizedAt: nullableText(row.finalized_at),
+    archivedAt: nullableText(row.archived_at),
+    archivedByUserId: nullableText(row.archived_by_user_id),
     createdAt: asText(row.created_at),
     updatedAt: asText(row.updated_at)
   };
@@ -108,7 +113,9 @@ export function mapRentalItem(row: DbRow): RentalItem {
     equipmentId: asText(row.equipment_id),
     nameSnapshot: asText(row.name_snapshot),
     quantity: asNumber(row.quantity),
-    equipmentValueCents: asNumber(row.equipment_value_cents),
+    unitRentalRateCents: asNumber(
+      row.unit_rental_rate_cents ?? row.equipment_value_cents,
+    ),
     unitIndemnificationValueCents: asNumber(row.unit_indemnification_value_cents)
   };
 }
@@ -118,11 +125,13 @@ export function mapRentalListItem(row: DbRow): RentalListItem {
     id: asText(row.id),
     code: asText(row.code),
     status: asText(row.status) === "FINALIZED" ? "FINALIZED" : "ONGOING",
+    period: asText(row.period) as RentalListItem["period"],
     customerName: asText(row.customer_name_snapshot),
     startDate: asText(row.start_date),
     returnDate: asText(row.return_date),
     createdAt: asText(row.created_at),
-    totalItems: asNumber(row.total_items)
+    totalItems: asNumber(row.total_items),
+    archivedAt: nullableText(row.archived_at)
   };
 }
 

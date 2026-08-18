@@ -50,7 +50,10 @@ void app
     const items = Array.from({ length: itemCount }, (_, index) => {
       const equipment = service.createEquipment({
         name: `Equipamento de validação ${String(index + 1).padStart(2, "0")}`,
-        equipmentValueCents: 90000 + index * 1000,
+        dailyRateCents: 90000 + index * 1000,
+        weeklyRateCents: 100000 + index * 1000,
+        biweeklyRateCents: 110000 + index * 1000,
+        monthlyRateCents: 120000 + index * 1000,
         unitIndemnificationValueCents: 15000 + index * 100,
         stockQuantity: 4
       });

@@ -39,7 +39,8 @@ export class EquipmentApplicationService {
     if (!nameWhere) return [];
     return this.db
       .queryAll(
-        `SELECT id, name, stock_quantity, equipment_value_cents, unit_indemnification_value_cents
+        `SELECT id, name, stock_quantity, daily_rate_cents, weekly_rate_cents,
+        biweekly_rate_cents, monthly_rate_cents, unit_indemnification_value_cents
        FROM equipment WHERE archived_at IS NULL AND ${nameWhere}
        ORDER BY name_normalized ASC LIMIT 10`,
         params,
@@ -48,7 +49,10 @@ export class EquipmentApplicationService {
         id: String(row.id),
         name: String(row.name),
         stockQuantity: Number(row.stock_quantity),
-        equipmentValueCents: Number(row.equipment_value_cents),
+        dailyRateCents: Number(row.daily_rate_cents),
+        weeklyRateCents: Number(row.weekly_rate_cents),
+        biweeklyRateCents: Number(row.biweekly_rate_cents),
+        monthlyRateCents: Number(row.monthly_rate_cents),
         unitIndemnificationValueCents: Number(
           row.unit_indemnification_value_cents,
         ),
@@ -61,14 +65,20 @@ export class EquipmentApplicationService {
     const id = randomUUID();
     this.db.execute(
       `INSERT INTO equipment
-        (id, name, name_normalized, equipment_value_cents, unit_indemnification_value_cents,
-         stock_quantity, archived_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+        (id, name, name_normalized, equipment_value_cents, daily_rate_cents,
+         weekly_rate_cents, biweekly_rate_cents, monthly_rate_cents,
+         unit_indemnification_value_cents, stock_quantity, archived_at,
+         created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
       [
         id,
         data.name,
         normalizeSearch(data.name),
-        data.equipmentValueCents,
+        data.monthlyRateCents,
+        data.dailyRateCents,
+        data.weeklyRateCents,
+        data.biweeklyRateCents,
+        data.monthlyRateCents,
         data.unitIndemnificationValueCents,
         data.stockQuantity,
         now,
@@ -82,12 +92,18 @@ export class EquipmentApplicationService {
     const data = parseInput(equipmentInputSchema, input);
     this.db.execute(
       `UPDATE equipment SET name = ?, name_normalized = ?, equipment_value_cents = ?,
-       unit_indemnification_value_cents = ?, stock_quantity = ?, updated_at = ?
+       daily_rate_cents = ?, weekly_rate_cents = ?, biweekly_rate_cents = ?,
+       monthly_rate_cents = ?, unit_indemnification_value_cents = ?,
+       stock_quantity = ?, updated_at = ?
        WHERE id = ? AND archived_at IS NULL`,
       [
         data.name,
         normalizeSearch(data.name),
-        data.equipmentValueCents,
+        data.monthlyRateCents,
+        data.dailyRateCents,
+        data.weeklyRateCents,
+        data.biweeklyRateCents,
+        data.monthlyRateCents,
         data.unitIndemnificationValueCents,
         data.stockQuantity,
         new Date().toISOString(),

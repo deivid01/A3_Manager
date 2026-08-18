@@ -138,7 +138,7 @@ export class A20sDbClient implements A20sDbClientLike {
         const message =
           typeof payload?.error === "string"
             ? payload.error
-            : `A20s DB API HTTP ${response.status}`;
+            : `API de sincronização HTTP ${response.status}`;
         throw new AppError(
           response.status === 401 || response.status === 403
             ? "A3-SYNC-002"
@@ -154,8 +154,8 @@ export class A20sDbClient implements A20sDbClientLike {
       }
       const aborted =
         error instanceof Error && error.name === "AbortError"
-          ? "Tempo limite excedido ao conectar ao A20s."
-          : "Servidor A20s indisponível.";
+          ? "Tempo limite excedido ao conectar ao servidor de sincronização."
+          : "Servidor de sincronização indisponível.";
       throw new AppError("A3-SYNC-001", aborted);
     } finally {
       clearTimeout(timeout);

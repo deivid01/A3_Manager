@@ -16,7 +16,7 @@ import {
   type SyncTableMetadata,
   type SyncTableName,
 } from "../src/infrastructure/sync/syncTables";
-import { createTestService, validCustomer } from "./helpers";
+import { createTestService, validCustomer, validEquipment } from "./helpers";
 
 describe("A20s DB API client", () => {
   it("faz health sem expor Authorization e autentica chamadas protegidas", async () => {
@@ -122,6 +122,53 @@ describe("sincronização local/remota", () => {
     expect(remote.rows.get("customers")?.some((row) => row.cpf === validCustomer.cpf)).toBe(true);
   });
 
+  it("sincroniza preços por período e arquivamento de locação", async () => {
+    const { db, service } = await createTestService();
+    prepareLinkedMirror(db);
+    const user = await service.login({ username: "SYSTEM DEV", password: "_int@383" });
+    const customer = service.createCustomer(validCustomer);
+    const equipment = service.createEquipment(validEquipment);
+    const rental = service.launchRental(
+      {
+        customerId: customer.id,
+        period: "BIWEEKLY",
+        startDate: "2026-08-14",
+        items: [{ equipmentId: equipment.id, quantity: 2 }],
+        deliveryStreet: "",
+        deliveryNeighborhood: "",
+        deliveryNumber: "",
+        deliveryCep: "",
+        deliveryCity: "",
+        deliveryState: "",
+        receiverIsCustomer: true,
+        receiverName: "",
+        receiverCpf: "",
+        paymentMethod: "PIX",
+        installments: null,
+      },
+      user.id,
+    );
+    service.archiveRental(rental.id, user.id);
+    const remote = new FakeA20sClient();
+    const coordinator = buildCoordinator(db, remote);
+
+    const status = await coordinator.syncNow();
+
+    const remoteEquipment = remote.rows.get("equipment")?.find((row) => row.id === equipment.id);
+    const remoteRental = remote.rows.get("rentals")?.find((row) => row.id === rental.id);
+    const remoteItem = remote.rows.get("rental_items")?.find((row) => row.rental_id === rental.id);
+    expect(status.state).toBe("online");
+    expect(remoteEquipment).toMatchObject({
+      daily_rate_cents: 10000,
+      weekly_rate_cents: 15000,
+      biweekly_rate_cents: 22000,
+      monthly_rate_cents: 28000,
+    });
+    expect(remoteRental?.archived_at).not.toBeNull();
+    expect(remoteRental?.archived_by_user_id).toBe(user.id);
+    expect(remoteItem?.unit_rental_rate_cents).toBe(22000);
+  });
+
   it("mantém evento pendente quando o push falha e não executa pull", async () => {
     const { db, service } = await createTestService();
     prepareLinkedMirror(db);
@@ -199,13 +246,81 @@ describe("sincronização local/remota", () => {
       "Cliente Remoto",
     );
   });
+
+  it("mantém um único timer periódico quando start é chamado mais de uma vez", async () => {
+    const { db } = await createTestService();
+    prepareLinkedMirror(db);
+    const remote = new FakeA20sClient();
+    const logger = new FakeSyncLogger();
+    const coordinator = buildCoordinator(db, remote, logger);
+
+    coordinator.start();
+    coordinator.start();
+    await coordinator.syncNow();
+    coordinator.stop();
+
+    expect(logger.infos.filter((entry) => entry.event === "sync_timer_started")).toHaveLength(1);
+    expect(logger.infos.filter((entry) => entry.event === "sync_timer_start_ignored")).toHaveLength(1);
+  });
+
+  it("registra duração das fases, linhas do pull e persistência local", async () => {
+    const { db } = await createTestService();
+    prepareLinkedMirror(db);
+    const remote = new FakeA20sClient();
+    seedRemoteBaseline(remote);
+    remote.rows.set("customers", [
+      {
+        id: "remote-customer",
+        name: "Cliente Remoto",
+        name_normalized: "cliente remoto",
+        cpf: "529.982.247-25",
+        cpf_normalized: "52998224725",
+        rg: "",
+        street: "Rua",
+        neighborhood: "Centro",
+        number: "1",
+        cep: "01001-000",
+        city: "São Paulo",
+        state: "SP",
+        contact: "Contato",
+        archived_at: null,
+        created_at: "2026-08-17T00:00:00.000Z",
+        updated_at: "2026-08-17T00:00:00.000Z",
+      },
+    ]);
+    const logger = new FakeSyncLogger();
+    const coordinator = buildCoordinator(db, remote, logger);
+
+    const status = await coordinator.syncNow();
+
+    const completed = logger.infos.find((entry) => entry.event === "sync_completed");
+    expect(status.state).toBe("online");
+    expect(completed?.details.phaseDurationsMs).toMatchObject({
+      health_config: expect.any(Number),
+      remote_query: expect.any(Number),
+      push_outbox: expect.any(Number),
+      pull_remote_snapshot: expect.any(Number),
+      apply_local_snapshot: expect.any(Number),
+      persist_export_local: expect.any(Number),
+    });
+    expect(completed?.details.rowCounts).toMatchObject({ customers: 1 });
+    expect(completed?.details.localPersist).toMatchObject({
+      bytes: expect.any(Number),
+      totalDurationMs: expect.any(Number),
+    });
+  });
 });
 
-function buildCoordinator(db: SqlJsDatabase, remote: FakeA20sClient): SyncCoordinator {
+function buildCoordinator(
+  db: SqlJsDatabase,
+  remote: FakeA20sClient,
+  logger?: FakeSyncLogger,
+): SyncCoordinator {
   return new SyncCoordinator({
     db,
     configStore: configStoreWithToken(),
     createClient: (_config: EffectiveA20sConfig) => remote,
+    logger,
     intervalMs: 60_000,
   });
 }
@@ -222,6 +337,59 @@ function prepareLinkedMirror(db: SqlJsDatabase): void {
       );
     });
   });
+}
+
+function seedRemoteBaseline(remote: FakeA20sClient): void {
+  remote.rows.set("users", [
+    {
+      id: "remote-user",
+      username: "SYSTEM DEV",
+      username_normalized: "system dev",
+      password_hash: "hash",
+      role: "ADMIN",
+      active: 1,
+      created_at: "2026-08-17T00:00:00.000Z",
+      updated_at: "2026-08-17T00:00:00.000Z",
+    },
+  ]);
+  remote.rows.set("company_settings", [
+    {
+      id: "default",
+      legal_name: "A3",
+      trade_name: "A3",
+      document: "Documento",
+      street: "Rua",
+      neighborhood: "Centro",
+      number: "1",
+      cep: "01001-000",
+      city: "São Paulo",
+      state: "SP",
+      contact: "Contato",
+      email: "",
+      updated_at: "2026-08-17T00:00:00.000Z",
+    },
+  ]);
+}
+
+class FakeSyncLogger {
+  readonly infos: Array<{ event: string; details: Record<string, unknown> }> = [];
+  readonly errors: Array<{
+    event: string;
+    error: unknown;
+    details: Record<string, unknown>;
+  }> = [];
+
+  info(event: string, details: Record<string, unknown> = {}): void {
+    this.infos.push({ event, details });
+  }
+
+  error(
+    event: string,
+    error: unknown,
+    details: Record<string, unknown> = {},
+  ): void {
+    this.errors.push({ event, error, details });
+  }
 }
 
 function configStoreWithToken(): A20sConfigStore {
@@ -304,9 +472,10 @@ class FakeA20sClient implements A20sDbClientLike {
       return response([{ total: this.rows.get(countTable)?.length ?? 0 }] as T[]);
     }
 
-    const snapshotTable = /FROM\s+(\w+)\s+ORDER BY/.exec(sql)?.[1] as
-      | SyncTableName
-      | undefined;
+    const snapshotTableName = /FROM\s+(\w+)\s+ORDER BY/.exec(sql)?.[1];
+    const snapshotTable = syncTables.some((table) => table.name === snapshotTableName)
+      ? snapshotTableName as SyncTableName
+      : undefined;
     if (snapshotTable) {
       this.snapshotPulls += 1;
       const limit = Number(params[0] ?? 500);

@@ -1,4 +1,5 @@
-import { CheckCircle2, FileDown, Printer } from "lucide-react";
+import { Archive, ArchiveRestore, CheckCircle2, FileDown, Printer } from "lucide-react";
+import { useRef, useState } from "react";
 import { paymentLabels, periodLabels, rentalStatusLabels } from "../../domain/labels";
 import {
   calculateRentalItemTotals,
@@ -6,18 +7,68 @@ import {
   formatCents
 } from "../../domain/money";
 import type { RentalDetail } from "../../domain/types";
-import { AppButton, Modal, StatusBadge } from "../components/Form";
+import { AppButton, Message, Modal, StatusBadge } from "../components/Form";
 
-export function RentalDetailModal({ rental, onClose, onFinalize }: {
+export function RentalDetailModal({ rental, onArchiveToggle, onClose, onFinalize }: {
   rental: RentalDetail;
+  onArchiveToggle(): void;
   onClose(): void;
   onFinalize(): void;
 }) {
+  const [savingPdf, setSavingPdf] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const printingRef = useRef(false);
+  const ArchiveIcon = rental.archivedAt ? ArchiveRestore : Archive;
   const totals = calculateRentalMoneyTotals(rental.items);
   const address = [rental.deliveryStreet, rental.deliveryNumber].filter(Boolean).join(", ");
   const addressLine = [address, rental.deliveryNeighborhood].filter(Boolean).join(" - ") || "Não informado";
   const cityLine = [rental.deliveryCity, rental.deliveryState].filter(Boolean).join(" / ");
   const cityAndCep = [cityLine, rental.deliveryCep].filter(Boolean).join(" · ") || "Não informado";
+
+  async function savePdf() {
+    setMessage("");
+    setError("");
+    setSavingPdf(true);
+    try {
+      const filePath = await window.a3.saveRentalPdf(rental.id);
+      if (filePath) {
+        setMessage("PDF salvo.");
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível salvar o PDF.",
+      );
+    } finally {
+      setSavingPdf(false);
+    }
+  }
+
+  async function printRental() {
+    if (printingRef.current) {
+      return;
+    }
+    printingRef.current = true;
+    setMessage("");
+    setError("");
+    setPrinting(true);
+    try {
+      await window.a3.printRental(rental.id, "report");
+      setMessage("Documento enviado para impressão.");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível imprimir a locação.",
+      );
+    } finally {
+      printingRef.current = false;
+      setPrinting(false);
+    }
+  }
 
   return (
     <Modal
@@ -27,13 +78,19 @@ export function RentalDetailModal({ rental, onClose, onFinalize }: {
       description={rental.customerSnapshot.name}
       onClose={onClose}
       footer={<>
-        <AppButton variant="ghost" icon={<FileDown size={18} />} type="button" onClick={() => window.a3.saveRentalPdf(rental.id)}>Salvar em PDF</AppButton>
-        <AppButton variant="secondary" icon={<Printer size={18} />} type="button" onClick={() => window.a3.printRental(rental.id)}>Imprimir</AppButton>
+        <AppButton variant="ghost" icon={<FileDown size={18} />} loading={savingPdf} type="button" onClick={() => void savePdf()}>Salvar em PDF</AppButton>
+        <AppButton variant="secondary" icon={<Printer size={18} />} loading={printing} type="button" onClick={() => void printRental()}>Imprimir</AppButton>
+        <AppButton variant="ghost" icon={<ArchiveIcon size={18} />} type="button" onClick={onArchiveToggle}>
+          {rental.archivedAt ? "Desarquivar" : "Arquivar"}
+        </AppButton>
         {rental.status === "ONGOING" && <AppButton variant="primary" icon={<CheckCircle2 size={18} />} type="button" onClick={onFinalize}>Finalizar locação</AppButton>}
       </>}
     >
+      {error && <Message kind="error">{error}</Message>}
+      {message && <Message kind="success">{message}</Message>}
       <div className="detail-overview">
         <div><span>Status</span><StatusBadge kind={rental.status === "ONGOING" ? "warning" : "success"}>{rentalStatusLabels[rental.status]}</StatusBadge></div>
+        {rental.archivedAt && <div><span>Arquivo</span><StatusBadge kind="neutral">Arquivada</StatusBadge></div>}
         <div><span>Período</span><strong>{periodLabels[rental.period]}</strong></div>
         <div><span>Datas</span><strong>{formatDate(rental.startDate)} a {formatDate(rental.returnDate)}</strong></div>
         <div><span>Pagamento</span><strong>{paymentLabels[rental.paymentMethod]}{rental.installments ? ` em ${rental.installments}x` : ""}</strong></div>
@@ -58,9 +115,7 @@ export function RentalDetailModal({ rental, onClose, onFinalize }: {
             ))}
           </div>
           <div className="detail-money-total">
-            <div><span>Valor dos equipamentos</span><strong>{formatCents(totals.equipmentTotalCents)}</strong></div>
-            <div><span>Indenização</span><strong>{formatCents(totals.indemnificationTotalCents)}</strong></div>
-            <div className="detail-total"><span>Total</span><strong>{formatCents(totals.grandTotalCents)}</strong></div>
+            <div className="detail-total"><span>Total da locação</span><strong>{formatCents(totals.rentalTotalCents)}</strong></div>
           </div>
         </section>
       </div>
@@ -73,11 +128,9 @@ function RentalItemMoney({ item }: { item: RentalDetail["items"][number] }) {
 
   return (
     <dl className="detail-item-money">
-      <div><dt>Valor unitário do equipamento</dt><dd>{formatCents(item.equipmentValueCents)}</dd></div>
-      <div><dt>Subtotal do equipamento</dt><dd>{formatCents(totals.equipmentSubtotalCents)}</dd></div>
+      <div><dt>Valor unitário da locação</dt><dd>{formatCents(item.unitRentalRateCents)}</dd></div>
+      <div><dt>Subtotal da locação</dt><dd>{formatCents(totals.itemSubtotalCents)}</dd></div>
       <div><dt>Indenização unitária</dt><dd>{formatCents(item.unitIndemnificationValueCents)}</dd></div>
-      <div><dt>Subtotal da indenização</dt><dd>{formatCents(totals.indemnificationSubtotalCents)}</dd></div>
-      <div><dt>Total do item</dt><dd>{formatCents(totals.totalCents)}</dd></div>
     </dl>
   );
 }

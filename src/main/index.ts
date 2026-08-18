@@ -2,6 +2,10 @@ import path from "node:path";
 import fs from "node:fs";
 import { app, BrowserWindow, ipcMain, Menu, safeStorage, shell } from "electron";
 import { ApplicationService } from "../application/ApplicationService";
+import {
+  assertAdminOperationAllowed,
+  type AdminOnlyOperation,
+} from "../application/authorization";
 import { AppError, toSafeError } from "../domain/appError";
 import type { User } from "../domain/types";
 import {
@@ -21,7 +25,9 @@ import type {
   LoginInput,
   RentalFilters,
   RentalLaunchInput,
+  RentalPrintOrigin,
   UserInput,
+  UserUpdateInput,
 } from "../shared/contracts";
 import { appDisplayName, developerUrl } from "../shared/env";
 import { ipcChannels } from "../shared/ipc";
@@ -33,55 +39,77 @@ let syncCoordinator: SyncCoordinator;
 let currentUser: User | null = null;
 let logger: FileLogger | null = null;
 
-void app
-  .whenReady()
-  .then(async () => {
-    logger = FileLogger.open(app.getPath("userData"));
-    logger.info("app_start", { version: app.getVersion() });
-    const database = await SqlJsDatabase.open(
-      resolveDatabasePath(app.getPath("userData")),
-    );
-    service = new ApplicationService(database);
-    printService = new ElectronPrintService();
-    await service.initialize();
-    syncCoordinator = new SyncCoordinator({
-      db: database,
-      configStore: new A20sConfigStore(
-        app.getPath("userData"),
-        createElectronSafeStorageTokenCodec(safeStorage),
-      ),
-      logger,
-    });
-    syncCoordinator.onStatusChange((status) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(ipcChannels.syncStatusChanged, status);
-      }
-    });
-    registerIpcHandlers();
-    await createMainWindow();
-    syncCoordinator.start();
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
-    app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        void createMainWindow();
-      }
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    logger?.info("second_instance_blocked", {
+      pid: process.pid,
+      hasMainWindow: Boolean(mainWindow && !mainWindow.isDestroyed()),
     });
-  })
-  .catch((error) => {
-    logger?.error("startup_failed", error);
-    console.error(error);
-    app.quit();
+    focusMainWindow();
   });
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
+  void app
+    .whenReady()
+    .then(bootApplication)
+    .catch((error) => {
+      logger?.error("startup_failed", error);
+      console.error(error);
+      app.quit();
+    });
 
-app.on("before-quit", () => {
-  syncCoordinator?.stop();
-});
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit();
+    }
+  });
+
+  app.on("before-quit", () => {
+    syncCoordinator?.stop();
+  });
+}
+
+async function bootApplication(): Promise<void> {
+  logger = FileLogger.open(app.getPath("userData"));
+  logger.info("app_start", {
+    version: app.getVersion(),
+    pid: process.pid,
+    singleInstanceLock: true,
+  });
+  const database = await SqlJsDatabase.open(
+    resolveDatabasePath(app.getPath("userData")),
+  );
+  service = new ApplicationService(database);
+  printService = new ElectronPrintService(logger);
+  await service.initialize();
+  syncCoordinator = new SyncCoordinator({
+    db: database,
+    configStore: new A20sConfigStore(
+      app.getPath("userData"),
+      createElectronSafeStorageTokenCodec(safeStorage),
+    ),
+    logger,
+  });
+  syncCoordinator.onStatusChange((status) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(ipcChannels.syncStatusChanged, status);
+    }
+  });
+  registerIpcHandlers();
+  await createMainWindow();
+  syncCoordinator.start();
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      void createMainWindow();
+      return;
+    }
+    focusMainWindow();
+  });
+}
 
 async function createMainWindow(): Promise<void> {
   Menu.setApplicationMenu(null);
@@ -128,6 +156,19 @@ async function createMainWindow(): Promise<void> {
   } else {
     await mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   }
+}
+
+function focusMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+  mainWindow.focus();
 }
 
 function resolveWindowIconPath(): string | undefined {
@@ -188,15 +229,27 @@ function registerIpcHandlers(): void {
     return currentUser;
   });
   handle(ipcChannels.listUsers, () => {
-    requireAdmin();
+    requireAdmin("user-management");
     syncCoordinator.requestFreshData();
     return service.listUsers();
   });
   handle(ipcChannels.createUser, async (input) => {
-    requireAdmin();
+    requireAdmin("user-management");
     const created = await service.createUser(input as UserInput);
     syncCoordinator.notifyLocalMutation();
     return created;
+  });
+  handle(ipcChannels.updateUser, async (id, input) => {
+    requireAdmin("user-management");
+    const updated = await service.updateUser(
+      String(id),
+      input as UserUpdateInput,
+    );
+    if (currentUser?.id === updated.id) {
+      currentUser = updated;
+    }
+    syncCoordinator.notifyLocalMutation();
+    return updated;
   });
   handle(ipcChannels.getCompany, () => {
     requireSession();
@@ -204,13 +257,13 @@ function registerIpcHandlers(): void {
     return service.getCompany();
   });
   handle(ipcChannels.saveCompany, (input) => {
-    requireAdmin();
+    requireSession();
     const saved = service.saveCompany(input as CompanyInput);
     syncCoordinator.notifyLocalMutation();
     return saved;
   });
   handle(ipcChannels.listCustomers, (search) => {
-    requireAdmin();
+    requireSession();
     syncCoordinator.requestFreshData();
     return service.listCustomers(String(search ?? ""));
   });
@@ -220,24 +273,24 @@ function registerIpcHandlers(): void {
     return service.searchCustomers(String(search ?? ""));
   });
   handle(ipcChannels.createCustomer, (input) => {
-    requireAdmin();
+    requireSession();
     const created = service.createCustomer(input as CustomerInput);
     syncCoordinator.notifyLocalMutation();
     return created;
   });
   handle(ipcChannels.updateCustomer, (id, input) => {
-    requireAdmin();
+    requireSession();
     const updated = service.updateCustomer(String(id), input as CustomerInput);
     syncCoordinator.notifyLocalMutation();
     return updated;
   });
   handle(ipcChannels.archiveCustomer, (id) => {
-    requireAdmin();
+    requireSession();
     service.archiveCustomer(String(id));
     syncCoordinator.notifyLocalMutation();
   });
   handle(ipcChannels.listEquipment, (search) => {
-    requireAdmin();
+    requireSession();
     syncCoordinator.requestFreshData();
     return service.listEquipment(String(search ?? ""));
   });
@@ -247,19 +300,19 @@ function registerIpcHandlers(): void {
     return service.searchEquipment(String(search ?? ""));
   });
   handle(ipcChannels.createEquipment, (input) => {
-    requireAdmin();
+    requireSession();
     const created = service.createEquipment(input as EquipmentInput);
     syncCoordinator.notifyLocalMutation();
     return created;
   });
   handle(ipcChannels.updateEquipment, (id, input) => {
-    requireAdmin();
+    requireSession();
     const updated = service.updateEquipment(String(id), input as EquipmentInput);
     syncCoordinator.notifyLocalMutation();
     return updated;
   });
   handle(ipcChannels.archiveEquipment, (id) => {
-    requireAdmin();
+    requireSession();
     service.archiveEquipment(String(id));
     syncCoordinator.notifyLocalMutation();
   });
@@ -285,34 +338,53 @@ function registerIpcHandlers(): void {
     syncCoordinator.notifyLocalMutation();
     return rental;
   });
+  handle(ipcChannels.archiveRental, (id) => {
+    const user = requireSession();
+    const rental = service.archiveRental(String(id), user.id);
+    syncCoordinator.notifyLocalMutation();
+    return rental;
+  });
+  handle(ipcChannels.unarchiveRental, (id) => {
+    requireSession();
+    const rental = service.unarchiveRental(String(id));
+    syncCoordinator.notifyLocalMutation();
+    return rental;
+  });
   handle(ipcChannels.saveRentalPdf, (id) => {
     requireSession();
     return printService.savePdf(service.getRental(String(id)));
   });
-  handle(ipcChannels.printRental, (id) => {
+  handle(ipcChannels.printRental, (id, origin) => {
     requireSession();
-    return printService.print(service.getRental(String(id)));
+    return printService.print(service.getRental(String(id)), {
+      ownerWindow: mainWindow,
+      origin: parsePrintOrigin(origin),
+    });
   });
   handle(ipcChannels.getSyncStatus, () => {
     requireSession();
     return syncCoordinator.getStatus();
   });
   handle(ipcChannels.getA20sConfig, () => {
-    requireAdmin();
+    requireAdmin("server-configuration");
     return syncCoordinator.getPublicConfig();
   });
   handle(ipcChannels.saveA20sConfig, (input) => {
-    requireAdmin();
+    requireAdmin("server-configuration");
     return syncCoordinator.saveConfig(input as A20sSyncConfigInput);
   });
   handle(ipcChannels.testA20sConnection, (input) => {
-    requireAdmin();
+    requireAdmin("server-configuration");
     return syncCoordinator.testConnection(input as A20sSyncConfigInput);
   });
   handle(ipcChannels.syncNow, () => {
-    requireAdmin();
+    requireAdmin("server-configuration");
     return syncCoordinator.syncNow();
   });
+}
+
+function parsePrintOrigin(value: unknown): RentalPrintOrigin {
+  return value === "launch" ? "launch" : "report";
 }
 
 function notifyMaximizedChanged(maximized: boolean): void {
@@ -342,16 +414,14 @@ function requireSession(): User {
   if (!currentUser) {
     throw new AppError("AUTH_FORBIDDEN", "Faça login para continuar.");
   }
+  if (!currentUser.active) {
+    throw new AppError("AUTH_FORBIDDEN", "Usuário inativo.");
+  }
   return currentUser;
 }
 
-function requireAdmin(): User {
+function requireAdmin(operation: AdminOnlyOperation): User {
   const user = requireSession();
-  if (user.role !== "ADMIN") {
-    throw new AppError(
-      "AUTH_FORBIDDEN",
-      "Apenas administradores podem executar esta ação.",
-    );
-  }
+  assertAdminOperationAllowed(user, operation);
   return user;
 }

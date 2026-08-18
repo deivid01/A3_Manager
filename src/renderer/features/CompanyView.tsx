@@ -44,7 +44,13 @@ const emptySyncForm: A20sSyncConfigInput = {
   token: "",
 };
 
-export function CompanyView({ draftUserId }: { draftUserId: string }) {
+export function CompanyView({
+  canManageSync,
+  draftUserId,
+}: {
+  canManageSync: boolean;
+  draftUserId: string;
+}) {
   const [form, setForm] = useState<CompanyInput>(emptyForm);
   const [baseline, setBaseline] = useState<CompanyInput | null>(null);
   const [saving, setSaving] = useState(false);
@@ -248,7 +254,7 @@ export function CompanyView({ draftUserId }: { draftUserId: string }) {
           </div>
         </div>
       </form>
-      <A20sSyncSection />
+      {canManageSync && <A20sSyncSection />}
     </section>
   );
 }
@@ -280,7 +286,7 @@ function A20sSyncSection() {
         setError(
           caught instanceof Error
             ? caught.message
-            : "Falha ao carregar a configuração A20s.",
+            : "Falha ao carregar a configuração do servidor.",
         ),
       );
     window.a3
@@ -307,12 +313,12 @@ function A20sSyncSection() {
       const saved = await window.a3.saveA20sConfig(form);
       setConfig(saved);
       setForm({ baseUrl: saved.baseUrl, database: saved.database, token: "" });
-      setMessage("Configuração A20s salva.");
+      setMessage("Configuração do servidor salva.");
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
-          : "Não foi possível salvar a configuração A20s.",
+          : "Não foi possível salvar a configuração do servidor.",
       );
     } finally {
       setSaving(false);
@@ -354,8 +360,9 @@ function A20sSyncSection() {
 
   return (
     <SectionCard
-      title="Servidor A20s"
-      description="DB API via ZeroTier para o espelho sincronizado."
+      className="sync-section-card"
+      title="Servidor de sincronização"
+      description="Configuração da sincronização de dados."
       action={
         status && (
           <StatusBadge kind={syncBadgeKind(status)}>
@@ -480,7 +487,7 @@ function isCompanyInputDraft(value: unknown): value is CompanyInput {
 
 function syncStatusLabel(status: SyncStatus): string {
   const labels: Record<SyncStatus["state"], string> = {
-    not_configured: "A20s não configurado",
+    not_configured: "Servidor não configurado",
     online: "Online",
     syncing: "Sincronizando",
     offline: "Offline",

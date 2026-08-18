@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { AppError } from "../../domain/appError";
 import { calculateReturnDate } from "../../domain/dateRules";
+import { getRentalRateForPeriod } from "../../domain/money";
 import { normalizeSearch } from "../../domain/normalization";
 import type {
   PagedResult,
@@ -80,8 +81,8 @@ export class RentalApplicationService {
            delivery_state, receiver_is_customer, receiver_name, receiver_cpf, payment_method,
            installments, customer_name_snapshot, customer_name_snapshot_normalized,
            customer_snapshot_json, company_snapshot_json, launched_by_username,
-           client_request_id, finalized_at, created_at, updated_at)
-         VALUES (?, ?, 'ONGOING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+           client_request_id, finalized_at, archived_at, archived_by_user_id, created_at, updated_at)
+         VALUES (?, ?, 'ONGOING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)`,
         [
           rentalId,
           code,
@@ -135,15 +136,16 @@ export class RentalApplicationService {
         this.db.execute(
           `INSERT INTO rental_items
             (id, rental_id, equipment_id, name_snapshot, quantity,
-             equipment_value_cents, unit_indemnification_value_cents)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+             equipment_value_cents, unit_rental_rate_cents, unit_indemnification_value_cents)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             randomUUID(),
             rentalId,
             equipment.id,
             equipment.name,
             item.quantity,
-            equipment.equipmentValueCents,
+            getRentalRateForPeriod(equipment, data.period),
+            getRentalRateForPeriod(equipment, data.period),
             equipment.unitIndemnificationValueCents,
           ],
         );
@@ -175,8 +177,8 @@ export class RentalApplicationService {
     );
     const rows = this.db
       .queryAll(
-        `SELECT r.id, r.code, r.status, r.customer_name_snapshot, r.start_date,
-        r.return_date, r.created_at,
+        `SELECT r.id, r.code, r.status, r.period, r.customer_name_snapshot, r.start_date,
+        r.return_date, r.created_at, r.archived_at,
         COALESCE((SELECT SUM(ri.quantity) FROM rental_items ri WHERE ri.rental_id = r.id), 0) AS total_items
        FROM rentals r ${where}
        ORDER BY r.created_at DESC, r.code DESC LIMIT ? OFFSET ?`,
@@ -236,5 +238,31 @@ export class RentalApplicationService {
       );
       return this.get(id);
     });
+  }
+
+  archive(id: string, userId: string): RentalDetail {
+    const now = new Date().toISOString();
+    this.db.execute(
+      `UPDATE rentals
+       SET archived_at = COALESCE(archived_at, ?),
+           archived_by_user_id = COALESCE(archived_by_user_id, ?),
+           updated_at = ?
+       WHERE id = ?`,
+      [now, userId, now, id],
+    );
+    return this.get(id);
+  }
+
+  unarchive(id: string): RentalDetail {
+    const now = new Date().toISOString();
+    this.db.execute(
+      `UPDATE rentals
+       SET archived_at = NULL,
+           archived_by_user_id = NULL,
+           updated_at = ?
+       WHERE id = ?`,
+      [now, id],
+    );
+    return this.get(id);
   }
 }

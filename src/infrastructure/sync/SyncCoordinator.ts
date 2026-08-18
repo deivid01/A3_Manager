@@ -1,5 +1,9 @@
+import { performance } from "node:perf_hooks";
 import { AppError } from "../../domain/appError";
+import { DEFAULT_EQUIPMENT_CATALOG } from "../../domain/equipmentCatalog";
+import { normalizeSearch } from "../../domain/normalization";
 import type {
+  DatabasePersistStats,
   DbParam,
   DbRow,
   SqlJsDatabase,
@@ -13,6 +17,7 @@ import {
 import {
   buildRemoteSchemaScript,
   deleteOrder,
+  remoteMigrations,
   syncTableByName,
   syncTables,
   type SyncTableMetadata,
@@ -35,10 +40,20 @@ interface OutboxEvent {
   operation: OutboxOperation;
 }
 
+interface SyncRunMetrics {
+  startedAt: number;
+  phaseDurationsMs: Record<string, number>;
+  rowCounts: Record<string, number>;
+  pushedOutboxEvents: number;
+  localPersist: DatabasePersistStats | null;
+}
+
+type SyncLogger = Pick<FileLogger, "info" | "error">;
+
 interface SyncCoordinatorOptions {
   db: SqlJsDatabase;
   configStore: A20sConfigStore;
-  logger?: FileLogger | null;
+  logger?: SyncLogger | null;
   createClient?: (config: EffectiveA20sConfig) => A20sDbClientLike;
   intervalMs?: number;
   freshnessMs?: number;
@@ -49,12 +64,13 @@ const remoteSchemaMarker = "a3_manager_sync_v1";
 export class SyncCoordinator {
   private readonly db: SqlJsDatabase;
   private readonly configStore: A20sConfigStore;
-  private readonly logger?: FileLogger | null;
+  private readonly logger?: SyncLogger | null;
   private readonly createClient: (config: EffectiveA20sConfig) => A20sDbClientLike;
   private readonly intervalMs: number;
   private readonly freshnessMs: number;
   private status: SyncStatus;
   private syncInFlight: Promise<SyncStatus> | null = null;
+  private activeSyncReason: string | null = null;
   private interval: NodeJS.Timeout | null = null;
   private lastFreshnessAttemptAt = 0;
   private listeners = new Set<(status: SyncStatus) => void>();
@@ -81,17 +97,26 @@ export class SyncCoordinator {
   }
 
   start(): void {
+    if (this.interval) {
+      this.logger?.info("sync_timer_start_ignored", {
+        reason: "already_started",
+        intervalMs: this.intervalMs,
+      });
+      return;
+    }
     this.refreshLocalStatus();
     void this.requestSync("startup");
     this.interval = setInterval(() => {
       void this.requestSync("interval");
     }, this.intervalMs);
+    this.logger?.info("sync_timer_started", { intervalMs: this.intervalMs });
   }
 
   stop(): void {
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
+      this.logger?.info("sync_timer_stopped");
     }
   }
 
@@ -142,8 +167,8 @@ export class SyncCoordinator {
         authenticated,
         databaseFound,
         message: databaseFound
-          ? "Conexão com o A20s confirmada."
-          : `Banco ${config.database} não encontrado no A20s.`,
+          ? "Conexão com o servidor de sincronização confirmada."
+          : `Banco ${config.database} não encontrado no servidor de sincronização.`,
       };
     } catch (error) {
       return {
@@ -154,7 +179,7 @@ export class SyncCoordinator {
         message:
           error instanceof Error
             ? error.message
-            : "Não foi possível testar o A20s.",
+            : "Não foi possível testar o servidor de sincronização.",
       };
     }
   }
@@ -180,41 +205,66 @@ export class SyncCoordinator {
 
   private requestSync(reason: string): Promise<SyncStatus> {
     if (this.syncInFlight) {
+      this.logger?.info("sync_request_joined", {
+        reason,
+        activeReason: this.activeSyncReason,
+      });
       return this.syncInFlight;
     }
 
+    this.activeSyncReason = reason;
     this.syncInFlight = this.runSync(reason).finally(() => {
       this.syncInFlight = null;
+      this.activeSyncReason = null;
     });
     return this.syncInFlight;
   }
 
   private async runSync(reason: string): Promise<SyncStatus> {
+    const metrics = createSyncRunMetrics();
     this.setStatus("syncing");
     const attemptedAt = new Date().toISOString();
     this.writeState("last_attempt_at", attemptedAt);
 
     try {
-      const config = this.configStore.loadEffectiveConfig();
-      const client = this.createClient(config);
-      await client.health();
-      await this.assertRemoteDatabaseExists(client, config.database);
-      const initialized = await this.ensureRemoteInitialization(client);
+      const { config, client } = await measureAsync(
+        metrics,
+        "health_config",
+        async () => {
+          const effectiveConfig = this.configStore.loadEffectiveConfig();
+          const remoteClient = this.createClient(effectiveConfig);
+          await remoteClient.health();
+          await this.assertRemoteDatabaseExists(
+            remoteClient,
+            effectiveConfig.database,
+          );
+          return { config: effectiveConfig, client: remoteClient };
+        },
+      );
+      const initialized = await measureAsync(metrics, "remote_query", () =>
+        this.ensureRemoteInitialization(client, metrics),
+      );
 
       if (!initialized.completedInitialSync) {
-        await this.flushOutbox(client);
+        metrics.pushedOutboxEvents = await measureAsync(
+          metrics,
+          "push_outbox",
+          () => this.flushOutbox(client),
+        );
         if (this.countPendingOutbox() === 0) {
-          await this.pullRemoteSnapshot(client);
+          await this.pullRemoteSnapshot(client, metrics);
         }
       }
 
       const syncedAt = new Date().toISOString();
       this.writeState("last_successful_sync_at", syncedAt);
       this.writeState("linked_a20s_database", config.database);
+      recordLocalPersist(metrics, this.db.getLastPersistStats());
       this.logger?.info("sync_completed", {
         reason,
         database: config.database,
         pendingCount: this.countPendingOutbox(),
+        ...finishSyncMetrics(metrics),
       });
       this.setStatus("online");
       return this.getStatus();
@@ -222,10 +272,12 @@ export class SyncCoordinator {
       const appError = toSyncAppError(error);
       const pending = this.countPendingOutbox();
       const state = mapErrorToState(appError.code, pending);
+      recordLocalPersist(metrics, this.db.getLastPersistStats());
       this.logger?.error("sync_failed", appError, {
         reason,
         code: appError.code,
         pendingCount: pending,
+        ...finishSyncMetrics(metrics),
       });
       this.setStatus(state, appError.code, appError.message);
       return this.getStatus();
@@ -240,13 +292,14 @@ export class SyncCoordinator {
     if (!databases.databases.some((database) => database.name === databaseName)) {
       throw new AppError(
         "A3-SYNC-003",
-        `Banco remoto ${databaseName} não encontrado no A20s.`,
+        `Banco remoto ${databaseName} não encontrado no servidor de sincronização.`,
       );
     }
   }
 
   private async ensureRemoteInitialization(
     client: A20sDbClientLike,
+    metrics: SyncRunMetrics,
   ): Promise<{ completedInitialSync: boolean }> {
     const remoteTables = await this.listRemoteTables(client);
     const hasMarker = remoteTables.includes("a3_sync_metadata");
@@ -277,6 +330,9 @@ export class SyncCoordinator {
     }
 
     await this.assertRemoteMarker(client);
+    await measureAsync(metrics, "remote_migrations", () =>
+      this.applyRemoteMigrations(client),
+    );
     await this.verifyRemoteSchema(client);
 
     if (!this.isLinkedToCurrentRemote()) {
@@ -293,7 +349,7 @@ export class SyncCoordinator {
         return { completedInitialSync: true };
       }
       this.clearOutboxAndMarkLinked();
-      await this.pullRemoteSnapshot(client);
+      await this.pullRemoteSnapshot(client, metrics);
       return { completedInitialSync: true };
     }
 
@@ -343,6 +399,33 @@ export class SyncCoordinator {
     `);
   }
 
+  private async applyRemoteMigrations(client: A20sDbClientLike): Promise<void> {
+    const result = await client.query<{ id: number | string }>(
+      "SELECT id FROM schema_migrations ORDER BY id",
+    );
+    const applied = new Set(result.rows.map((row) => Number(row.id)));
+    const pending = remoteMigrations.filter(
+      (migration) => !applied.has(migration.id),
+    );
+    if (pending.length === 0) {
+      return;
+    }
+
+    await client.script(`
+      BEGIN;
+      ${pending
+        .map(
+          (migration) => `
+            ${migration.sql}
+            INSERT OR IGNORE INTO schema_migrations (id, name, applied_at)
+            VALUES (${migration.id}, ${sqlLiteral(migration.name)}, CURRENT_TIMESTAMP);
+          `,
+        )
+        .join("\n")}
+      COMMIT;
+    `);
+  }
+
   private async verifyRemoteSchema(client: A20sDbClientLike): Promise<void> {
     for (const table of syncTables) {
       const result = await client.query<{ name: string }>(
@@ -385,17 +468,19 @@ export class SyncCoordinator {
     });
   }
 
-  private async flushOutbox(client: A20sDbClientLike): Promise<void> {
+  private async flushOutbox(client: A20sDbClientLike): Promise<number> {
+    let pushed = 0;
     while (true) {
       const events = this.loadOutboxBatch();
       if (events.length === 0) {
-        return;
+        return pushed;
       }
 
       for (const event of events) {
         try {
           await this.pushOutboxEvent(client, event);
           this.db.execute("DELETE FROM sync_outbox WHERE id = ?", [event.id]);
+          pushed += 1;
         } catch (error) {
           const appError = toSyncAppError(error, "A3-SYNC-005");
           this.db.execute(
@@ -456,7 +541,10 @@ export class SyncCoordinator {
     await client.execute(buildUpsertSql(table), valuesForRow(table, row));
   }
 
-  private async pullRemoteSnapshot(client: A20sDbClientLike): Promise<void> {
+  private async pullRemoteSnapshot(
+    client: A20sDbClientLike,
+    metrics: SyncRunMetrics,
+  ): Promise<void> {
     if (this.countPendingOutbox() > 0) {
       throw new AppError(
         "A3-SYNC-006",
@@ -464,41 +552,52 @@ export class SyncCoordinator {
       );
     }
 
-    const snapshot = new Map<SyncTableName, DbRow[]>();
-    for (const table of syncTables) {
-      const rows: DbRow[] = [];
-      let offset = 0;
-      while (true) {
-        const result = await client.query<DbRow>(
-          `SELECT ${table.columns.join(", ")}
-           FROM ${table.name}
-           ORDER BY ${table.primaryKey}
-           LIMIT ? OFFSET ?`,
-          [500, offset],
-        );
-        rows.push(...result.rows);
-        if (result.rows.length < 500) {
-          break;
-        }
-        offset += result.rows.length;
-      }
-      snapshot.set(table.name, rows);
-    }
-
-    this.db.withOutboxSuppressed(() => {
-      this.db.transaction(() => {
-        for (const table of deleteOrder) {
-          this.db.execute(`DELETE FROM ${table.name}`);
-        }
+    const snapshot = await measureAsync(
+      metrics,
+      "pull_remote_snapshot",
+      async () => {
+        const rowsByTable = new Map<SyncTableName, DbRow[]>();
         for (const table of syncTables) {
-          const insertSql = buildInsertSql(table);
-          for (const row of snapshot.get(table.name) ?? []) {
-            this.db.execute(insertSql, valuesForRow(table, row));
+          const rows: DbRow[] = [];
+          let offset = 0;
+          while (true) {
+            const result = await client.query<DbRow>(
+              `SELECT ${table.columns.join(", ")}
+               FROM ${table.name}
+               ORDER BY ${table.primaryKey}
+               LIMIT ? OFFSET ?`,
+              [500, offset],
+            );
+            rows.push(...result.rows);
+            if (result.rows.length < 500) {
+              break;
+            }
+            offset += result.rows.length;
           }
+          metrics.rowCounts[table.name] = rows.length;
+          rowsByTable.set(table.name, rows);
         }
-        this.writeState("linked_a20s_database", this.getPublicConfig().database);
+        return rowsByTable;
+      },
+    );
+
+    measureSync(metrics, "apply_local_snapshot", () => {
+      this.db.withOutboxSuppressed(() => {
+        this.db.transaction(() => {
+          for (const table of deleteOrder) {
+            this.db.execute(`DELETE FROM ${table.name}`);
+          }
+          for (const table of syncTables) {
+            const insertSql = buildInsertSql(table);
+            for (const row of snapshot.get(table.name) ?? []) {
+              this.db.execute(insertSql, valuesForRow(table, row));
+            }
+          }
+          this.writeState("linked_a20s_database", this.getPublicConfig().database);
+        });
       });
     });
+    recordLocalPersist(metrics, this.db.getLastPersistStats());
   }
 
   private async countRemoteBusinessRows(client: A20sDbClientLike): Promise<number> {
@@ -519,7 +618,6 @@ export class SyncCoordinator {
   private isLocalFreshInstall(): boolean {
     const operationalRows = [
       "customers",
-      "equipment",
       "rentals",
       "rental_items",
       "inventory_movements",
@@ -530,6 +628,16 @@ export class SyncCoordinator {
           this.db.queryOne(`SELECT COUNT(*) AS total FROM ${table}`)?.total ?? 0,
         ),
       0,
+    );
+    const customOrTouchedEquipment = Number(
+      this.db.queryOne(
+        `SELECT COUNT(*) AS total
+         FROM equipment
+         WHERE name_normalized NOT IN (${DEFAULT_EQUIPMENT_CATALOG.map(() => "?").join(", ")})
+            OR stock_quantity <> 0
+            OR archived_at IS NOT NULL`,
+        DEFAULT_EQUIPMENT_CATALOG.map((item) => normalizeSearch(item.name)),
+      )?.total ?? 0,
     );
     const users = Number(
       this.db.queryOne("SELECT COUNT(*) AS total FROM users")?.total ?? 0,
@@ -542,7 +650,12 @@ export class SyncCoordinator {
       [company.document, company.street, company.contact].every((value) =>
         String(value ?? "").toLowerCase().includes("configurar"),
       );
-    return operationalRows === 0 && users <= 1 && companyLooksDefault;
+    return (
+      operationalRows === 0 &&
+      customOrTouchedEquipment === 0 &&
+      users <= 1 &&
+      companyLooksDefault
+    );
   }
 
   private clearOutboxAndMarkLinked(): void {
@@ -693,4 +806,87 @@ function mapErrorToState(
     return "offline";
   }
   return "error";
+}
+
+function createSyncRunMetrics(): SyncRunMetrics {
+  return {
+    startedAt: performance.now(),
+    phaseDurationsMs: {},
+    rowCounts: {},
+    pushedOutboxEvents: 0,
+    localPersist: null,
+  };
+}
+
+async function measureAsync<T>(
+  metrics: SyncRunMetrics,
+  phase: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const startedAt = performance.now();
+  try {
+    return await operation();
+  } finally {
+    metrics.phaseDurationsMs[phase] = roundDuration(
+      performance.now() - startedAt,
+    );
+  }
+}
+
+function measureSync<T>(
+  metrics: SyncRunMetrics,
+  phase: string,
+  operation: () => T,
+): T {
+  const startedAt = performance.now();
+  try {
+    return operation();
+  } finally {
+    metrics.phaseDurationsMs[phase] = roundDuration(
+      performance.now() - startedAt,
+    );
+  }
+}
+
+function recordLocalPersist(
+  metrics: SyncRunMetrics,
+  stats: DatabasePersistStats | null,
+): void {
+  if (!stats) {
+    return;
+  }
+  if (
+    !metrics.localPersist ||
+    stats.totalDurationMs > metrics.localPersist.totalDurationMs
+  ) {
+    metrics.localPersist = stats;
+  }
+  metrics.phaseDurationsMs.persist_export_local = Math.max(
+    metrics.phaseDurationsMs.persist_export_local ?? 0,
+    stats.totalDurationMs,
+  );
+}
+
+function finishSyncMetrics(metrics: SyncRunMetrics): {
+  durationMs: number;
+  phaseDurationsMs: Record<string, number>;
+  rowCounts: Record<string, number>;
+  pushedOutboxEvents: number;
+  localPersist: DatabasePersistStats | null;
+} {
+  return {
+    durationMs: roundDuration(performance.now() - metrics.startedAt),
+    phaseDurationsMs: metrics.phaseDurationsMs,
+    rowCounts: metrics.rowCounts,
+    pushedOutboxEvents: metrics.pushedOutboxEvents,
+    localPersist: metrics.localPersist,
+  };
+}
+
+function roundDuration(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function sqlLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }

@@ -1,3 +1,6 @@
+import { DEFAULT_EQUIPMENT_CATALOG } from "../../domain/equipmentCatalog";
+import { normalizeSearch } from "../../domain/normalization";
+
 export interface Migration {
   id: number;
   name: string;
@@ -353,5 +356,90 @@ export const migrations: Migration[] = [
         VALUES (lower(hex(randomblob(16))), 'inventory_movements', OLD.id, 'DELETE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
       END;
     `
+  },
+  {
+    id: 4,
+    name: "rental_period_pricing_catalog_and_archives",
+    sql: buildRentalPeriodPricingCatalogAndArchivesSql(),
   }
 ];
+
+function buildRentalPeriodPricingCatalogAndArchivesSql(): string {
+  return `
+      ALTER TABLE equipment ADD COLUMN daily_rate_cents INTEGER NOT NULL DEFAULT 0 CHECK (daily_rate_cents >= 0);
+      ALTER TABLE equipment ADD COLUMN weekly_rate_cents INTEGER NOT NULL DEFAULT 0 CHECK (weekly_rate_cents >= 0);
+      ALTER TABLE equipment ADD COLUMN biweekly_rate_cents INTEGER NOT NULL DEFAULT 0 CHECK (biweekly_rate_cents >= 0);
+      ALTER TABLE equipment ADD COLUMN monthly_rate_cents INTEGER NOT NULL DEFAULT 0 CHECK (monthly_rate_cents >= 0);
+
+      UPDATE equipment
+      SET
+        daily_rate_cents = equipment_value_cents,
+        weekly_rate_cents = equipment_value_cents,
+        biweekly_rate_cents = equipment_value_cents,
+        monthly_rate_cents = equipment_value_cents;
+
+      ${DEFAULT_EQUIPMENT_CATALOG.map(buildDefaultEquipmentUpdateSql).join("\n")}
+      ${DEFAULT_EQUIPMENT_CATALOG.map(buildDefaultEquipmentInsertSql).join("\n")}
+
+      ALTER TABLE rental_items ADD COLUMN unit_rental_rate_cents INTEGER CHECK (unit_rental_rate_cents >= 0);
+
+      UPDATE rental_items
+      SET unit_rental_rate_cents = equipment_value_cents
+      WHERE unit_rental_rate_cents IS NULL;
+
+      ALTER TABLE rentals ADD COLUMN archived_at TEXT;
+      ALTER TABLE rentals ADD COLUMN archived_by_user_id TEXT;
+      CREATE INDEX IF NOT EXISTS idx_rentals_archived_at ON rentals(archived_at);
+    `;
+}
+
+function buildDefaultEquipmentUpdateSql(
+  item: (typeof DEFAULT_EQUIPMENT_CATALOG)[number],
+): string {
+  return `
+      UPDATE equipment
+      SET
+        daily_rate_cents = ${item.dailyRateCents},
+        weekly_rate_cents = ${item.weeklyRateCents},
+        biweekly_rate_cents = ${item.biweeklyRateCents},
+        monthly_rate_cents = ${item.monthlyRateCents},
+        unit_indemnification_value_cents = ${item.unitIndemnificationValueCents},
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE name_normalized = ${sqlLiteral(normalizeSearch(item.name))};
+    `;
+}
+
+function buildDefaultEquipmentInsertSql(
+  item: (typeof DEFAULT_EQUIPMENT_CATALOG)[number],
+): string {
+  return `
+      INSERT INTO equipment
+        (id, name, name_normalized, equipment_value_cents, daily_rate_cents,
+         weekly_rate_cents, biweekly_rate_cents, monthly_rate_cents,
+         unit_indemnification_value_cents, stock_quantity, archived_at,
+         created_at, updated_at)
+      SELECT
+        ${sqlLiteral(item.id)},
+        ${sqlLiteral(item.name)},
+        ${sqlLiteral(normalizeSearch(item.name))},
+        ${item.monthlyRateCents},
+        ${item.dailyRateCents},
+        ${item.weeklyRateCents},
+        ${item.biweeklyRateCents},
+        ${item.monthlyRateCents},
+        ${item.unitIndemnificationValueCents},
+        0,
+        NULL,
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE NOT EXISTS (
+        SELECT 1 FROM equipment
+        WHERE id = ${sqlLiteral(item.id)}
+           OR name_normalized = ${sqlLiteral(normalizeSearch(item.name))}
+      );
+    `;
+}
+
+function sqlLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}

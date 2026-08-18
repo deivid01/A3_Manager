@@ -17,13 +17,4 @@ describe("regras de data de locação", () => {
     expect(calculateReturnDate("2026-08-14", "BIWEEKLY")).toBe("2026-08-29");
   });
 
-  it("calcula períodos longos definidos pelo domínio", () => {
-    expect(calculateReturnDate("2026-08-14", "QUARTERLY")).toBe("2026-11-14");
-    expect(calculateReturnDate("2026-08-14", "SEMIANNUAL")).toBe("2027-02-14");
-    expect(calculateReturnDate("2026-08-14", "ANNUAL")).toBe("2027-08-14");
-  });
-
-  it("trata ano bissexto em período anual com semântica de fim de mês", () => {
-    expect(calculateReturnDate("2024-02-29", "ANNUAL")).toBe("2025-02-28");
-  });
 });

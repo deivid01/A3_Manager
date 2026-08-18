@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import initSqlJs, { type Database, type SqlJsStatic, type SqlValue } from "sql.js";
 import { migrations } from "./schema";
 
@@ -9,6 +10,14 @@ const requireFromHere = createRequire(__filename);
 
 export type DbRow = Record<string, SqlValue>;
 export type DbParam = string | number | null;
+
+export interface DatabasePersistStats {
+  sequence: number;
+  bytes: number;
+  exportDurationMs: number;
+  writeDurationMs: number;
+  totalDurationMs: number;
+}
 
 export class SqlJsDatabase {
   private constructor(
@@ -19,6 +28,8 @@ export class SqlJsDatabase {
 
   private transactionDepth = 0;
   private outboxSuppressionDepth = 0;
+  private persistSequence = 0;
+  private lastPersistStats: DatabasePersistStats | null = null;
 
   static async open(filePath: string): Promise<SqlJsDatabase> {
     const wasmPath = resolveWasmPath();
@@ -91,6 +102,10 @@ export class SqlJsDatabase {
     return this.db.export();
   }
 
+  getLastPersistStats(): DatabasePersistStats | null {
+    return this.lastPersistStats ? { ...this.lastPersistStats } : null;
+  }
+
   getFilePath(): string {
     return this.filePath;
   }
@@ -160,9 +175,6 @@ export class SqlJsDatabase {
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       [suppressed ? "1" : "0"]
     );
-    if (this.transactionDepth === 0) {
-      this.persist();
-    }
   }
 
   private resetOutboxSuppressionFlag(): void {
@@ -176,8 +188,21 @@ export class SqlJsDatabase {
   }
 
   private persist(): void {
+    const startedAt = performance.now();
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-    fs.writeFileSync(this.filePath, Buffer.from(this.db.export()));
+    const exportStartedAt = performance.now();
+    const bytes = Buffer.from(this.db.export());
+    const exportEndedAt = performance.now();
+    fs.writeFileSync(this.filePath, bytes);
+    const endedAt = performance.now();
+    this.persistSequence += 1;
+    this.lastPersistStats = {
+      sequence: this.persistSequence,
+      bytes: bytes.byteLength,
+      exportDurationMs: roundDuration(exportEndedAt - exportStartedAt),
+      writeDurationMs: roundDuration(endedAt - exportEndedAt),
+      totalDurationMs: roundDuration(endedAt - startedAt),
+    };
   }
 }
 
@@ -201,4 +226,8 @@ function resolveWasmPath(): string {
   }
 
   return found;
+}
+
+function roundDuration(value: number): number {
+  return Math.round(value * 10) / 10;
 }

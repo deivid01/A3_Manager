@@ -1,3 +1,5 @@
+import type { RentalPeriod } from "./types";
+
 export function parseMoneyToCents(value: string): number {
   const normalized = value
     .replace(/[^\d,.-]/g, "")
@@ -21,30 +23,53 @@ export function formatCents(value: number): string {
 
 export interface RentalMoneyItem {
   quantity: number;
-  equipmentValueCents: number;
+  unitRentalRateCents: number;
   unitIndemnificationValueCents: number;
 }
 
 export interface RentalItemMoneyTotals {
-  equipmentSubtotalCents: number;
+  itemSubtotalCents: number;
   indemnificationSubtotalCents: number;
   totalCents: number;
 }
 
 export interface RentalMoneyTotals {
-  equipmentTotalCents: number;
-  indemnificationTotalCents: number;
-  grandTotalCents: number;
+  rentalTotalCents: number;
 }
 
-export function calculateEquipmentSubtotal(
+export interface EquipmentRentalRates {
+  dailyRateCents: number;
+  weeklyRateCents: number;
+  biweeklyRateCents: number;
+  monthlyRateCents: number;
+}
+
+export function getRentalRateForPeriod(
+  rates: EquipmentRentalRates,
+  period: RentalPeriod
+): number {
+  switch (period) {
+    case "DAILY":
+      return rates.dailyRateCents;
+    case "WEEKLY":
+      return rates.weeklyRateCents;
+    case "BIWEEKLY":
+      return rates.biweeklyRateCents;
+    case "MONTHLY":
+      return rates.monthlyRateCents;
+    default:
+      return exhaustivePeriod(period);
+  }
+}
+
+export function calculateRentalItemSubtotal(
   quantity: number,
-  equipmentValueCents: number
+  unitRentalRateCents: number
 ): number {
   assertPositiveQuantity(quantity);
-  assertMoneyCents(equipmentValueCents, "O valor do equipamento deve ser informado em centavos.");
+  assertMoneyCents(unitRentalRateCents, "O valor da locação deve ser informado em centavos.");
 
-  return quantity * equipmentValueCents;
+  return quantity * unitRentalRateCents;
 }
 
 export function calculateIndemnificationTotal(
@@ -58,9 +83,9 @@ export function calculateIndemnificationTotal(
 }
 
 export function calculateRentalItemTotals(item: RentalMoneyItem): RentalItemMoneyTotals {
-  const equipmentSubtotalCents = calculateEquipmentSubtotal(
+  const itemSubtotalCents = calculateRentalItemSubtotal(
     item.quantity,
-    item.equipmentValueCents
+    item.unitRentalRateCents
   );
   const indemnificationSubtotalCents = calculateIndemnificationTotal(
     item.quantity,
@@ -68,9 +93,9 @@ export function calculateRentalItemTotals(item: RentalMoneyItem): RentalItemMone
   );
 
   return {
-    equipmentSubtotalCents,
+    itemSubtotalCents,
     indemnificationSubtotalCents,
-    totalCents: equipmentSubtotalCents + indemnificationSubtotalCents
+    totalCents: itemSubtotalCents
   };
 }
 
@@ -79,16 +104,11 @@ export function calculateRentalMoneyTotals(items: RentalMoneyItem[]): RentalMone
     (totals, item) => {
       const itemTotals = calculateRentalItemTotals(item);
       return {
-        equipmentTotalCents: totals.equipmentTotalCents + itemTotals.equipmentSubtotalCents,
-        indemnificationTotalCents:
-          totals.indemnificationTotalCents + itemTotals.indemnificationSubtotalCents,
-        grandTotalCents: totals.grandTotalCents + itemTotals.totalCents
+        rentalTotalCents: totals.rentalTotalCents + itemTotals.itemSubtotalCents
       };
     },
     {
-      equipmentTotalCents: 0,
-      indemnificationTotalCents: 0,
-      grandTotalCents: 0
+      rentalTotalCents: 0
     }
   );
 }
@@ -103,4 +123,8 @@ function assertMoneyCents(value: number, message: string): void {
   if (!Number.isInteger(value) || value < 0) {
     throw new Error(message);
   }
+}
+
+function exhaustivePeriod(value: never): never {
+  throw new Error(`Período de locação inválido: ${String(value)}`);
 }

@@ -21,11 +21,9 @@ export function renderRentalDocumentHtml(
         <tr>
           <td class="numeric">${item.quantity}</td>
           <td>${escapeHtml(item.nameSnapshot)}</td>
-          <td class="numeric">${formatCents(item.equipmentValueCents)}</td>
-          <td class="numeric">${formatCents(totals.equipmentSubtotalCents)}</td>
+          <td class="numeric">${formatCents(item.unitRentalRateCents)}</td>
+          <td class="numeric">${formatCents(totals.itemSubtotalCents)}</td>
           <td class="numeric">${formatCents(item.unitIndemnificationValueCents)}</td>
-          <td class="numeric">${formatCents(totals.indemnificationSubtotalCents)}</td>
-          <td class="numeric">${formatCents(totals.totalCents)}</td>
         </tr>
       `;
     })
@@ -165,26 +163,16 @@ export function renderRentalDocumentHtml(
               <tr>
                 <th class="numeric">Qtd.</th>
                 <th>Equipamento</th>
-                <th class="numeric">Valor unitário do equipamento</th>
-                <th class="numeric">Subtotal do equipamento</th>
+                <th class="numeric">Valor unitário da locação</th>
+                <th class="numeric">Subtotal da locação</th>
                 <th class="numeric">Indenização unitária</th>
-                <th class="numeric">Subtotal da indenização</th>
-                <th class="numeric">Total do item</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
             <tfoot>
-              <tr>
-                <th colspan="6" class="numeric">Valor total dos equipamentos</th>
-                <th class="numeric">${formatCents(totals.equipmentTotalCents)}</th>
-              </tr>
-              <tr>
-                <th colspan="6" class="numeric">Valor total da indenização</th>
-                <th class="numeric">${formatCents(totals.indemnificationTotalCents)}</th>
-              </tr>
               <tr class="grand-total">
-                <th colspan="6" class="numeric">TOTAL</th>
-                <th class="numeric">${formatCents(totals.grandTotalCents)}</th>
+                <th colspan="4" class="numeric">Total da locação</th>
+                <th class="numeric">${formatCents(totals.rentalTotalCents)}</th>
               </tr>
             </tfoot>
           </table>

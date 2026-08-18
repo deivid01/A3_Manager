@@ -89,9 +89,11 @@
 .page-header-action { flex: none; }
 
 .company-form { display: grid; gap: var(--space-5); }
+.sync-section-card { padding-bottom: 28px; }
 .sync-config-form { display: grid; gap: var(--space-4); }
 .sync-config-status { align-items: center; color: var(--text-secondary); display: flex; font-size: 12px; justify-content: space-between; margin: 16px 0 4px; }
 .sync-config-status span { align-items: center; display: flex; gap: var(--space-2); min-width: 0; }
 .form-submit-row { align-items: center; display: flex; gap: var(--space-4); justify-content: space-between; }
+.sync-section-card .form-submit-row { margin-top: 8px; }
 .form-submit-row > span { align-items: center; color: var(--text-muted); display: flex; font-size: 12px; gap: var(--space-2); }
 .form-submit-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; }

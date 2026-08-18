@@ -1,6 +1,9 @@
 import type { PaymentMethod, RentalPeriod, RentalStatus, UserRole } from "./types";
 
-export const periodLabels: Record<RentalPeriod, string> = {
+export const periodLabels: Record<
+  RentalPeriod | "QUARTERLY" | "SEMIANNUAL" | "ANNUAL",
+  string
+> = {
   DAILY: "Diária",
   WEEKLY: "Semanal",
   BIWEEKLY: "Quinzenal",

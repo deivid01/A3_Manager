@@ -39,7 +39,10 @@ describe("integridade transacional de locações", () => {
 
     expect(second.id).toBe(first.id);
     expect(service.listRentals({ page: 1, pageSize: 10 }).total).toBe(1);
-    expect(service.listEquipment("Betoneira")[0]?.stockQuantity).toBe(3);
+    expect(
+      service.listEquipment("Betoneira 400L").find((item) => item.id === equipment.id)
+        ?.stockQuantity,
+    ).toBe(3);
     expect(second.installments).toBeNull();
     expect(second.receiverName).toBe("");
   });
@@ -118,20 +121,37 @@ describe("integridade transacional de locações", () => {
         )
       `
     );
+    legacyDb.run(
+      `INSERT INTO rental_items
+        (id, rental_id, equipment_id, name_snapshot, quantity,
+         equipment_value_cents, unit_indemnification_value_cents)
+       VALUES
+        ('rental-item-v1', 'rental-v1', 'equipment-v1', 'Equipamento Legado',
+         2, 123456, 7899)`
+    );
     fs.writeFileSync(dbPath, Buffer.from(legacyDb.export()));
     legacyDb.close();
 
     const migrated = await SqlJsDatabase.open(dbPath);
     const columns = migrated.queryAll("PRAGMA table_info(rentals)").map((row) => String(row.name));
+    const itemColumns = migrated.queryAll("PRAGMA table_info(rental_items)").map((row) => String(row.name));
     const rental = migrated.queryOne("SELECT code, client_request_id FROM rentals WHERE id = ?", [
       "rental-v1"
     ]);
+    const rentalItem = migrated.queryOne(
+      "SELECT unit_rental_rate_cents FROM rental_items WHERE id = ?",
+      ["rental-item-v1"]
+    );
     const applied = migrated.queryAll("SELECT id FROM schema_migrations ORDER BY id");
     migrated.close();
 
     expect(columns).toContain("client_request_id");
+    expect(columns).toContain("archived_at");
+    expect(columns).toContain("archived_by_user_id");
+    expect(itemColumns).toContain("unit_rental_rate_cents");
     expect(rental?.code).toBe("LOC-20260814-0001");
     expect(rental?.client_request_id).toBeNull();
-    expect(applied.map((row) => Number(row.id))).toEqual([1, 2, 3]);
+    expect(rentalItem?.unit_rental_rate_cents).toBe(123456);
+    expect(applied.map((row) => Number(row.id))).toEqual([1, 2, 3, 4]);
   });
 });

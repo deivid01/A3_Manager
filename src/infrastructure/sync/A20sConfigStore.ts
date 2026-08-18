@@ -74,7 +74,7 @@ export class A20sConfigStore {
     if (!token) {
       throw new AppError(
         "A3-SYNC-009",
-        "Token da API A20s não configurado.",
+        "Token da API do servidor de sincronização não configurado.",
       );
     }
 
@@ -115,7 +115,7 @@ export class A20sConfigStore {
     } catch {
       throw new AppError(
         "A3-SYNC-009",
-        "Configuração local do A20s está ilegível.",
+        "Configuração local do servidor de sincronização está ilegível.",
       );
     }
   }
@@ -143,7 +143,7 @@ export function normalizeDatabaseName(value: string): string {
   if (!/^[A-Za-z0-9_-]+$/.test(database)) {
     throw new AppError(
       "VALIDATION_ERROR",
-      "Nome do banco A20s inválido. Use apenas letras, números, hífen ou underscore.",
+      "Nome do banco remoto inválido. Use apenas letras, números, hífen ou underscore.",
     );
   }
   return database;
@@ -156,7 +156,7 @@ function parseSyncConfigInput(input: A20sSyncConfigInput): A20sSyncConfigInput {
     if (error instanceof ZodError) {
       throw new AppError(
         "VALIDATION_ERROR",
-        error.issues[0]?.message ?? "Configuração A20s inválida.",
+        error.issues[0]?.message ?? "Configuração do servidor de sincronização inválida.",
       );
     }
     throw error;

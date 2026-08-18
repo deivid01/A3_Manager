@@ -6,8 +6,10 @@ import type { SqlJsDatabase } from "../../infrastructure/database/SqlJsDatabase"
 import {
   loginSchema,
   userInputSchema,
+  userUpdateInputSchema,
   type LoginInput,
   type UserInput,
+  type UserUpdateInput,
 } from "../../shared/contracts";
 import { mapUser } from "../rowMappers";
 import { hashPassword, verifyPassword } from "../security";
@@ -75,5 +77,81 @@ export class AuthApplicationService {
       );
     }
     return mapUser(mustFind(this.db, "users", id));
+  }
+
+  async updateUser(id: string, input: UserUpdateInput): Promise<User> {
+    const data = parseInput(userUpdateInputSchema, input);
+    const username = normalizeUsername(data.username);
+    const passwordHash = data.password ? await hashPassword(data.password) : null;
+
+    return this.db.transaction(() => {
+      const current = mapUser(mustFind(this.db, "users", id));
+      this.assertKeepsActiveAdmin(current, data.role, data.active);
+
+      try {
+        if (passwordHash) {
+          this.db.execute(
+            `UPDATE users
+             SET username = ?, username_normalized = ?, password_hash = ?,
+                 role = ?, active = ?, updated_at = ?
+             WHERE id = ?`,
+            [
+              username,
+              username,
+              passwordHash,
+              data.role,
+              data.active ? 1 : 0,
+              new Date().toISOString(),
+              id,
+            ],
+          );
+        } else {
+          this.db.execute(
+            `UPDATE users
+             SET username = ?, username_normalized = ?, role = ?,
+                 active = ?, updated_at = ?
+             WHERE id = ?`,
+            [
+              username,
+              username,
+              data.role,
+              data.active ? 1 : 0,
+              new Date().toISOString(),
+              id,
+            ],
+          );
+        }
+      } catch (error) {
+        throw duplicateOrDatabaseError(
+          error,
+          "Já existe um usuário com esse nome.",
+        );
+      }
+
+      return mapUser(mustFind(this.db, "users", id));
+    });
+  }
+
+  private assertKeepsActiveAdmin(
+    current: User,
+    nextRole: User["role"],
+    nextActive: boolean,
+  ): void {
+    if (!current.active || current.role !== "ADMIN") {
+      return;
+    }
+    if (nextRole === "ADMIN" && nextActive) {
+      return;
+    }
+
+    const row = this.db.queryOne(
+      "SELECT COUNT(*) AS total FROM users WHERE role = 'ADMIN' AND active = 1",
+    );
+    if (Number(row?.total ?? 0) <= 1) {
+      throw new AppError(
+        "VALIDATION_ERROR",
+        "Não é possível deixar o sistema sem um administrador ativo.",
+      );
+    }
   }
 }

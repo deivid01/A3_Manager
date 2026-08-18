@@ -1,4 +1,4 @@
-import { Eraser, ShieldCheck, UserPlus, UsersRound } from "lucide-react";
+import { Edit3, Eraser, RotateCcw, ShieldCheck, UserPlus, UsersRound } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { roleLabels } from "../../domain/labels";
 import {
@@ -6,12 +6,13 @@ import {
   normalizeUsernameDraft,
 } from "../../domain/normalization";
 import type { User } from "../../domain/types";
-import type { UserInput } from "../../shared/contracts";
+import type { UserInput, UserUpdateInput } from "../../shared/contracts";
 import {
   AppButton,
   ConfirmDialog,
   EmptyState,
   Field,
+  IconButton,
   Message,
   Modal,
   PageHeader,
@@ -27,12 +28,21 @@ import {
   useStoredDraft,
 } from "../lib/formDrafts";
 
-const emptyForm: UserInput = { username: "", password: "", role: "USER" };
-type UserCreateDraft = Pick<UserInput, "username" | "role">;
+interface UserForm {
+  username: string;
+  password: string;
+  role: UserInput["role"];
+  active: boolean;
+}
+
+const emptyForm: UserForm = { username: "", password: "", role: "USER", active: true };
+type UserCreateDraft = Pick<UserForm, "username" | "role">;
 
 export function UsersView({ draftUserId }: { draftUserId: string }) {
   const [rows, setRows] = useState<User[]>([]);
-  const [form, setForm] = useState<UserInput>(emptyForm);
+  const [form, setForm] = useState<UserForm>(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBaseline, setEditBaseline] = useState<UserForm | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [clearConfirm, setClearConfirm] = useState(false);
   const [message, setMessage] = useState("");
@@ -43,7 +53,7 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
   useStoredDraft({
     key: createDraftKey,
     value: userDraft,
-    meaningful: isMeaningfulUserDraft(userDraft),
+    meaningful: !editingId && isMeaningfulUserDraft(userDraft),
   });
 
   useEffect(() => {
@@ -62,42 +72,78 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
   }
 
   function startCreate() {
+    setEditingId(null);
+    setEditBaseline(null);
     const restored = readStoredDraft(
       getSessionDraftStorage(),
       createDraftKey,
       isUserCreateDraft,
     );
-    setForm(restored ? { ...restored, password: "" } : emptyForm);
+    setForm(restored ? { ...restored, password: "", active: true } : emptyForm);
     if (restored) setMessage("Rascunho restaurado.");
     setError("");
+    setFormOpen(true);
+  }
+
+  function startEdit(user: User) {
+    const baseline = userToForm(user);
+    setEditingId(user.id);
+    setEditBaseline(baseline);
+    setForm(baseline);
+    setError("");
+    setMessage("");
     setFormOpen(true);
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
-    const normalizedForm = {
+    const normalizedForm: UserForm = {
       ...form,
       username: normalizeUsername(form.username),
     };
     setForm(normalizedForm);
     try {
-      await window.a3.createUser(normalizedForm);
-      removeStoredDraft(getSessionDraftStorage(), createDraftKey);
+      if (editingId) {
+        const input: UserUpdateInput = {
+          username: normalizedForm.username,
+          password: normalizedForm.password,
+          role: normalizedForm.role,
+          active: normalizedForm.active,
+        };
+        await window.a3.updateUser(editingId, input);
+        setMessage("Usuário atualizado com sucesso.");
+      } else {
+        const input: UserInput = {
+          username: normalizedForm.username,
+          password: normalizedForm.password,
+          role: normalizedForm.role,
+        };
+        await window.a3.createUser(input);
+        removeStoredDraft(getSessionDraftStorage(), createDraftKey);
+        setMessage("Usuário criado com sucesso.");
+      }
       setForm(emptyForm);
+      setEditingId(null);
+      setEditBaseline(null);
       setFormOpen(false);
-      setMessage("Usuário criado com sucesso.");
       await load();
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
-          : "Não foi possível criar o usuário.",
+          : "Não foi possível salvar o usuário.",
       );
     }
   }
 
   function requestClearForm() {
+    if (editingId && editBaseline) {
+      setForm(editBaseline);
+      setError("");
+      return;
+    }
+
     if (!hasUserFormContent(form)) {
       resetCreateForm();
       return;
@@ -108,6 +154,8 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
 
   function resetCreateForm() {
     setForm(emptyForm);
+    setEditingId(null);
+    setEditBaseline(null);
     setError("");
     setClearConfirm(false);
     removeStoredDraft(getSessionDraftStorage(), createDraftKey);
@@ -150,6 +198,7 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
                   <th>Usuário</th>
                   <th>Perfil</th>
                   <th>Status</th>
+                  <th className="action-column">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -169,6 +218,15 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
                         {user.active ? "Ativo" : "Inativo"}
                       </StatusBadge>
                     </td>
+                    <td data-label="Ações" className="row-actions">
+                      <IconButton
+                        type="button"
+                        title="Editar usuário"
+                        onClick={() => startEdit(user)}
+                      >
+                        <Edit3 size={17} />
+                      </IconButton>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -179,18 +237,22 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
       {formOpen && (
         <Modal
           className="user-form-modal"
-          title="Novo usuário"
-          description="Defina as credenciais e o perfil de acesso."
+          title={editingId ? "Editar usuário" : "Novo usuário"}
+          description={
+            editingId
+              ? "Atualize identificação, perfil, status ou nova senha."
+              : "Defina as credenciais e o perfil de acesso."
+          }
           onClose={() => setFormOpen(false)}
           footer={
             <>
               <AppButton
                 type="button"
                 variant="ghost"
-                icon={<Eraser size={17} />}
+                icon={editingId ? <RotateCcw size={17} /> : <Eraser size={17} />}
                 onClick={requestClearForm}
               >
-                Limpar
+                {editingId ? "Desfazer alterações" : "Limpar"}
               </AppButton>
               <AppButton
                 type="button"
@@ -200,7 +262,7 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
                 Cancelar
               </AppButton>
               <AppButton type="submit" variant="primary" form="user-form">
-                Criar usuário
+                {editingId ? "Salvar usuário" : "Criar usuário"}
               </AppButton>
             </>
           }
@@ -225,10 +287,11 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
               }
             />
             <Field
-              required
+              required={!editingId}
               autoComplete="new-password"
               label="Senha"
               type="password"
+              hint={editingId ? "Deixe em branco para preservar a senha atual." : undefined}
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
             />
@@ -242,6 +305,18 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
               <option value="USER">Usuário</option>
               <option value="ADMIN">Administrador</option>
             </SelectField>
+            {editingId && (
+              <SelectField
+                label="Status"
+                value={form.active ? "ACTIVE" : "INACTIVE"}
+                onChange={(e) =>
+                  setForm({ ...form, active: e.target.value === "ACTIVE" })
+                }
+              >
+                <option value="ACTIVE">Ativo</option>
+                <option value="INACTIVE">Inativo</option>
+              </SelectField>
+            )}
             {error && <Message kind="error">{error}</Message>}
           </form>
         </Modal>
@@ -263,7 +338,16 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
   );
 }
 
-function toUserCreateDraft(form: UserInput): UserCreateDraft {
+function userToForm(user: User): UserForm {
+  return {
+    username: user.username,
+    password: "",
+    role: user.role,
+    active: user.active,
+  };
+}
+
+function toUserCreateDraft(form: UserForm): UserCreateDraft {
   return {
     username: form.username,
     role: form.role,
@@ -274,11 +358,12 @@ function isMeaningfulUserDraft(draft: UserCreateDraft): boolean {
   return Boolean(draft.username.trim() || draft.role !== "USER");
 }
 
-function hasUserFormContent(form: UserInput): boolean {
+function hasUserFormContent(form: UserForm): boolean {
   return Boolean(
     form.username.trim() ||
       form.password.trim() ||
-      form.role !== "USER",
+      form.role !== "USER" ||
+      !form.active,
   );
 }
 

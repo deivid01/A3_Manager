@@ -1,5 +1,9 @@
 import { migrations } from "../database/schema";
 
+export const remoteMigrations = migrations.filter(
+  (migration) => migration.id !== 3,
+);
+
 export type SyncTableName =
   | "users"
   | "company_settings"
@@ -79,6 +83,10 @@ export const syncTables: SyncTableMetadata[] = [
       "name",
       "name_normalized",
       "equipment_value_cents",
+      "daily_rate_cents",
+      "weekly_rate_cents",
+      "biweekly_rate_cents",
+      "monthly_rate_cents",
       "unit_indemnification_value_cents",
       "stock_quantity",
       "archived_at",
@@ -115,6 +123,8 @@ export const syncTables: SyncTableMetadata[] = [
       "company_snapshot_json",
       "launched_by_username",
       "finalized_at",
+      "archived_at",
+      "archived_by_user_id",
       "created_at",
       "updated_at",
       "client_request_id",
@@ -130,6 +140,7 @@ export const syncTables: SyncTableMetadata[] = [
       "name_snapshot",
       "quantity",
       "equipment_value_cents",
+      "unit_rental_rate_cents",
       "unit_indemnification_value_cents",
     ],
   },
@@ -155,8 +166,7 @@ export const syncTableByName = new Map(
 export const deleteOrder = [...syncTables].reverse();
 
 export function buildRemoteSchemaScript(): string {
-  const migrationScript = migrations
-    .filter((migration) => migration.id < 3)
+  const migrationScript = remoteMigrations
     .map(
       (migration) => `
         ${migration.sql}

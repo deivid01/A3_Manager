@@ -1,5 +1,5 @@
 import { Check, FileDown, PackagePlus, Plus, Printer, Search, Send, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { paymentLabels, periodLabels } from "../../domain/labels";
 import { formatCents, type RentalMoneyTotals } from "../../domain/money";
 import type { CustomerSearchResult, EquipmentSearchResult, RentalDetail } from "../../domain/types";
@@ -45,9 +45,7 @@ export function RentalReview({
       </dl>
       <Separator className="review-separator" />
       <div className="review-money">
-        <div><span>Valor dos equipamentos</span><strong>{formatCents(totals.equipmentTotalCents)}</strong></div>
-        <div><span>Indenização</span><strong>{formatCents(totals.indemnificationTotalCents)}</strong></div>
-        <div className="review-total"><span>Total</span><strong>{formatCents(totals.grandTotalCents)}</strong></div>
+        <div className="review-total"><span>Total da locação</span><strong>{formatCents(totals.rentalTotalCents)}</strong></div>
       </div>
       {error && <Message kind="error">{error}</Message>}
       <AppButton className="launch-button" variant="primary" icon={<Send size={18} />} loading={launching} type="button" onClick={onLaunch}>
@@ -58,6 +56,55 @@ export function RentalReview({
 }
 
 export function RentalSuccessModal({ rental, onClose }: { rental: RentalDetail; onClose(): void }) {
+  const [savingPdf, setSavingPdf] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const printingRef = useRef(false);
+
+  async function savePdf() {
+    setMessage("");
+    setError("");
+    setSavingPdf(true);
+    try {
+      const filePath = await window.a3.saveRentalPdf(rental.id);
+      if (filePath) {
+        setMessage("PDF salvo.");
+      }
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível salvar o PDF.",
+      );
+    } finally {
+      setSavingPdf(false);
+    }
+  }
+
+  async function printRental() {
+    if (printingRef.current) {
+      return;
+    }
+    printingRef.current = true;
+    setMessage("");
+    setError("");
+    setPrinting(true);
+    try {
+      await window.a3.printRental(rental.id, "launch");
+      setMessage("Documento enviado para impressão.");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Não foi possível imprimir a locação.",
+      );
+    } finally {
+      printingRef.current = false;
+      setPrinting(false);
+    }
+  }
+
   return (
     <Modal
       className="rental-success-modal"
@@ -65,10 +112,12 @@ export function RentalSuccessModal({ rental, onClose }: { rental: RentalDetail; 
       description="A baixa de estoque foi concluída com sucesso."
       onClose={onClose}
       footer={<>
-        <AppButton variant="ghost" icon={<FileDown size={18} />} type="button" onClick={() => window.a3.saveRentalPdf(rental.id)}>Salvar em PDF</AppButton>
-        <AppButton variant="primary" icon={<Printer size={18} />} type="button" onClick={() => window.a3.printRental(rental.id)}>Imprimir</AppButton>
+        <AppButton variant="ghost" icon={<FileDown size={18} />} loading={savingPdf} type="button" onClick={() => void savePdf()}>Salvar em PDF</AppButton>
+        <AppButton variant="primary" icon={<Printer size={18} />} loading={printing} type="button" onClick={() => void printRental()}>Imprimir</AppButton>
       </>}
     >
+      {error && <Message kind="error">{error}</Message>}
+      {message && <Message kind="success">{message}</Message>}
       <div className="success-rental-code">
         <span><Check size={26} /></span>
         <div><small>Código da locação</small><strong>{rental.code}</strong></div>

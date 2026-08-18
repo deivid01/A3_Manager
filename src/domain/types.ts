@@ -5,12 +5,16 @@ export const RENTAL_PERIODS = [
   "DAILY",
   "WEEKLY",
   "BIWEEKLY",
-  "MONTHLY",
-  "QUARTERLY",
-  "SEMIANNUAL",
-  "ANNUAL"
+  "MONTHLY"
 ] as const;
 export type RentalPeriod = (typeof RENTAL_PERIODS)[number];
+
+export const RENTAL_ARCHIVE_FILTERS = [
+  "UNARCHIVED",
+  "ARCHIVED",
+  "ALL"
+] as const;
+export type RentalArchiveFilter = (typeof RENTAL_ARCHIVE_FILTERS)[number];
 
 export const RENTAL_STATUSES = ["ONGOING", "FINALIZED"] as const;
 export type RentalStatus = (typeof RENTAL_STATUSES)[number];
@@ -100,7 +104,10 @@ export interface Customer {
 export interface Equipment {
   id: string;
   name: string;
-  equipmentValueCents: number;
+  dailyRateCents: number;
+  weeklyRateCents: number;
+  biweeklyRateCents: number;
+  monthlyRateCents: number;
   unitIndemnificationValueCents: number;
   stockQuantity: number;
   archivedAt: string | null;
@@ -114,7 +121,7 @@ export interface RentalItem {
   equipmentId: string;
   nameSnapshot: string;
   quantity: number;
-  equipmentValueCents: number;
+  unitRentalRateCents: number;
   unitIndemnificationValueCents: number;
 }
 
@@ -143,6 +150,8 @@ export interface Rental {
   companySnapshot: CompanySettings;
   launchedByUsername: string;
   finalizedAt: string | null;
+  archivedAt: string | null;
+  archivedByUserId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -168,7 +177,10 @@ export interface EquipmentSearchResult {
   id: string;
   name: string;
   stockQuantity: number;
-  equipmentValueCents: number;
+  dailyRateCents: number;
+  weeklyRateCents: number;
+  biweeklyRateCents: number;
+  monthlyRateCents: number;
   unitIndemnificationValueCents: number;
 }
 
@@ -176,11 +188,13 @@ export interface RentalListItem {
   id: string;
   code: string;
   status: RentalStatus;
+  period: RentalPeriod;
   customerName: string;
   startDate: string;
   returnDate: string;
   createdAt: string;
   totalItems: number;
+  archivedAt: string | null;
 }
 
 export interface PagedResult<T> {

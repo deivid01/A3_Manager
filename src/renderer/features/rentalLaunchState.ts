@@ -2,10 +2,12 @@ import type {
   CustomerSearchResult,
   EquipmentSearchResult,
 } from "../../domain/types";
+import { getRentalRateForPeriod } from "../../domain/money";
 import type { RentalLaunchInput } from "../../shared/contracts";
 
 export interface SelectedRentalItem extends EquipmentSearchResult {
   quantity: number;
+  unitRentalRateCents: number;
 }
 
 export interface DeliveryAddress {
@@ -126,6 +128,27 @@ export function buildRentalLaunchForm(
   };
 }
 
+export function buildSelectedRentalItem(
+  equipment: EquipmentSearchResult,
+  period: RentalLaunchInput["period"],
+): SelectedRentalItem {
+  return {
+    ...equipment,
+    quantity: 1,
+    unitRentalRateCents: getRentalRateForPeriod(equipment, period),
+  };
+}
+
+export function recalculateSelectedRentalItemsForPeriod(
+  items: SelectedRentalItem[],
+  period: RentalLaunchInput["period"],
+): SelectedRentalItem[] {
+  return items.map((item) => ({
+    ...item,
+    unitRentalRateCents: getRentalRateForPeriod(item, period),
+  }));
+}
+
 export function isMeaningfulRentalDraft(
   draft: RentalLaunchStoredDraft,
   today = new Date().toISOString().slice(0, 10),
@@ -241,8 +264,12 @@ function isSelectedRentalItem(value: unknown): value is SelectedRentalItem {
     typeof item.id === "string" &&
     typeof item.name === "string" &&
     typeof item.stockQuantity === "number" &&
-    typeof item.equipmentValueCents === "number" &&
+    typeof item.dailyRateCents === "number" &&
+    typeof item.weeklyRateCents === "number" &&
+    typeof item.biweeklyRateCents === "number" &&
+    typeof item.monthlyRateCents === "number" &&
     typeof item.unitIndemnificationValueCents === "number" &&
+    typeof item.unitRentalRateCents === "number" &&
     typeof item.quantity === "number"
   );
 }

@@ -17,7 +17,7 @@ import {
   UserCog,
   Users,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { User } from "../domain/types";
 import { roleLabels } from "../domain/labels";
 import type { AppInfo, SyncStatus } from "../shared/contracts";
@@ -64,9 +64,9 @@ const navItems: Array<{
 }> = [
   { key: "rentals", label: "Relatórios", icon: BarChart3 },
   { key: "launch", label: "Nova locação", icon: CalendarPlus },
-  { key: "customers", label: "Clientes", icon: Users, adminOnly: true },
-  { key: "equipment", label: "Equipamentos", icon: Package, adminOnly: true },
-  { key: "company", label: "Empresa", icon: Building2, adminOnly: true },
+  { key: "customers", label: "Clientes", icon: Users },
+  { key: "equipment", label: "Equipamentos", icon: Package },
+  { key: "company", label: "Empresa", icon: Building2 },
   { key: "users", label: "Usuários", icon: UserCog, adminOnly: true },
 ];
 
@@ -134,9 +134,18 @@ function AuthenticatedShell({
 }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const syncStatus = useSyncStatus();
-  const visibleNav = navItems.filter(
-    (item) => !item.adminOnly || currentUser.role === "ADMIN",
+  const visibleNav = useMemo(
+    () => navItems.filter(
+      (item) => !item.adminOnly || currentUser.role === "ADMIN",
+    ),
+    [currentUser.role],
   );
+
+  useEffect(() => {
+    if (!visibleNav.some((item) => item.key === activeView)) {
+      onNavigate("rentals");
+    }
+  }, [activeView, onNavigate, visibleNav]);
 
   return (
     <TooltipProvider delayDuration={180}>
@@ -237,8 +246,15 @@ function AuthenticatedShell({
         {activeView === "launch" && <RentalLaunchView draftUserId={currentUser.id} />}
         {activeView === "customers" && <CustomersView draftUserId={currentUser.id} />}
         {activeView === "equipment" && <EquipmentView draftUserId={currentUser.id} />}
-        {activeView === "company" && <CompanyView draftUserId={currentUser.id} />}
-        {activeView === "users" && <UsersView draftUserId={currentUser.id} />}
+        {activeView === "company" && (
+          <CompanyView
+            canManageSync={currentUser.role === "ADMIN"}
+            draftUserId={currentUser.id}
+          />
+        )}
+        {activeView === "users" && currentUser.role === "ADMIN" && (
+          <UsersView draftUserId={currentUser.id} />
+        )}
       </main>
     </div>
     </TooltipProvider>
@@ -331,7 +347,7 @@ function syncStatusMeta(status: SyncStatus | null): {
     return { label: "Offline", kind: "neutral", icon: CloudOff };
   }
   if (status.state === "not_configured") {
-    return { label: "A20s não configurado", kind: "neutral", icon: CloudOff };
+    return { label: "Servidor não configurado", kind: "neutral", icon: CloudOff };
   }
   return { label: "Erro de sincronização", kind: "danger", icon: TriangleAlert };
 }

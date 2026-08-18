@@ -29,7 +29,7 @@ describe("serviços principais do A3 Manager", () => {
     expect(service.searchCustomers("")).toEqual([]);
     expect(service.searchEquipment("B")).toEqual([]);
     expect(service.searchCustomers("Ma")[0]?.id).toBe(customer.id);
-    expect(service.searchEquipment("Be")[0]?.id).toBe(equipment.id);
+    expect(service.searchEquipment("400L")[0]?.id).toBe(equipment.id);
   });
 
   it("lança locação transacional, baixa estoque e calcula indenização por item", async () => {
@@ -60,8 +60,53 @@ describe("serviços principais do A3 Manager", () => {
     );
 
     expect(rental.returnDate).toBe("2026-09-14");
+    expect(rental.items[0]?.unitRentalRateCents).toBe(28000);
     expect(rental.items[0]?.unitIndemnificationValueCents).toBe(20000);
-    expect(service.listEquipment("Betoneira")[0]?.stockQuantity).toBe(3);
+    expect(
+      service.listEquipment("Betoneira 400L").find((item) => item.id === equipment.id)
+        ?.stockQuantity,
+    ).toBe(3);
+  });
+
+  it("usa o preço do período como snapshot no item da locação", async () => {
+    const { service } = await createTestService();
+    const user = await service.login({ username: "SYSTEM DEV", password: "_int@383" });
+    const customer = service.createCustomer(validCustomer);
+    const equipment = service.createEquipment({ ...validEquipment, stockQuantity: 8 });
+    const cases = [
+      ["DAILY", 10000],
+      ["WEEKLY", 15000],
+      ["BIWEEKLY", 22000],
+      ["MONTHLY", 28000],
+    ] as const;
+
+    for (const [period, expectedRate] of cases) {
+      const rental = service.launchRental(
+        {
+          customerId: customer.id,
+          period,
+          startDate: "2026-08-14",
+          items: [{ equipmentId: equipment.id, quantity: 1 }],
+          deliveryStreet: "",
+          deliveryNeighborhood: "",
+          deliveryNumber: "",
+          deliveryCep: "",
+          deliveryCity: "",
+          deliveryState: "",
+          receiverIsCustomer: true,
+          receiverName: "",
+          receiverCpf: "",
+          paymentMethod: "PIX",
+          installments: null,
+        },
+        user.id,
+      );
+
+      expect(rental.items[0]?.unitRentalRateCents).toBe(expectedRate);
+      expect(calculateRentalMoneyTotals(rental.items)).toEqual({
+        rentalTotalCents: expectedRate,
+      });
+    }
   });
 
   it("calcula total de responsabilidade em locação com três equipamentos", async () => {
@@ -71,21 +116,30 @@ describe("serviços principais do A3 Manager", () => {
     const betoneira = service.createEquipment({
       ...validEquipment,
       name: "Betoneira",
-      equipmentValueCents: 100000,
+      dailyRateCents: 1000,
+      weeklyRateCents: 2000,
+      biweeklyRateCents: 3000,
+      monthlyRateCents: 100000,
       unitIndemnificationValueCents: 20000,
       stockQuantity: 4
     });
     const martelete = service.createEquipment({
       ...validEquipment,
       name: "Martelete",
-      equipmentValueCents: 50000,
+      dailyRateCents: 1000,
+      weeklyRateCents: 2000,
+      biweeklyRateCents: 3000,
+      monthlyRateCents: 50000,
       unitIndemnificationValueCents: 10000,
       stockQuantity: 3
     });
     const andaime = service.createEquipment({
       ...validEquipment,
       name: "Andaime",
-      equipmentValueCents: 123456,
+      dailyRateCents: 1000,
+      weeklyRateCents: 2000,
+      biweeklyRateCents: 3000,
+      monthlyRateCents: 123456,
       unitIndemnificationValueCents: 7899,
       stockQuantity: 3
     });
@@ -116,9 +170,7 @@ describe("serviços principais do A3 Manager", () => {
     );
 
     expect(calculateRentalMoneyTotals(rental.items)).toEqual({
-      equipmentTotalCents: 620368,
-      indemnificationTotalCents: 73697,
-      grandTotalCents: 694065
+      rentalTotalCents: 620368
     });
   });
 
@@ -150,7 +202,10 @@ describe("serviços principais do A3 Manager", () => {
         user.id
       )
     ).toThrow(AppError);
-    expect(service.listEquipment("Betoneira")[0]?.stockQuantity).toBe(1);
+    expect(
+      service.listEquipment("Betoneira 400L").find((item) => item.id === equipment.id)
+        ?.stockQuantity,
+    ).toBe(1);
     expect(service.listRentals({ page: 1, pageSize: 10 }).total).toBe(0);
   });
 
@@ -182,9 +237,15 @@ describe("serviços principais do A3 Manager", () => {
 
     const finalized = service.finalizeRental(rental.id);
     expect(finalized.status).toBe("FINALIZED");
-    expect(service.listEquipment("Betoneira")[0]?.stockQuantity).toBe(5);
+    expect(
+      service.listEquipment("Betoneira 400L").find((item) => item.id === equipment.id)
+        ?.stockQuantity,
+    ).toBe(5);
     expect(() => service.finalizeRental(rental.id)).toThrow(AppError);
-    expect(service.listEquipment("Betoneira")[0]?.stockQuantity).toBe(5);
+    expect(
+      service.listEquipment("Betoneira 400L").find((item) => item.id === equipment.id)
+        ?.stockQuantity,
+    ).toBe(5);
   });
 
   it("preserva snapshots históricos após edição dos cadastros", async () => {
@@ -231,6 +292,7 @@ describe("serviços principais do A3 Manager", () => {
 
     const detail = service.getRental(rental.id);
     expect(detail.customerSnapshot.name).toBe("Maria Oliveira");
+    expect(detail.items[0]?.unitRentalRateCents).toBe(28000);
     expect(detail.items[0]?.unitIndemnificationValueCents).toBe(20000);
     expect(detail.companySnapshot.tradeName).toBe("A3 Locação");
   });
@@ -388,13 +450,16 @@ describe("serviços principais do A3 Manager", () => {
     expect(html).toContain("Maria Oliveira");
     expect(html).toContain("Betoneira 400L");
     expect(html).toContain("João Recebedor");
-    expect(html).toContain("Valor total dos equipamentos");
-    expect(html).toContain("Valor total da indenização");
-    expect(html).toContain("TOTAL");
+    expect(html).toContain("Total da locação");
+    expect(html).toContain("Valor unitário da locação");
+    expect(html).toContain("Subtotal da locação");
+    expect(html).toContain("Indenização unitária");
     expect(html).toContain("TERMO DE RESPONSABILIDADE");
     expect(html).toContain("O LOCATÁRIO declara receber os equipamentos relacionados");
     expect(html).toContain("print-footer");
-    expect(html).not.toContain("Valor da locação");
+    expect(html).not.toContain("Valor total dos equipamentos");
+    expect(html).not.toContain("Valor total da indenização");
+    expect(html).not.toContain("Subtotal da indenização");
     expect(html).not.toContain("Nova locação");
   });
 });

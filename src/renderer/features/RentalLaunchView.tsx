@@ -15,12 +15,14 @@ import { Switch } from "../components/ui/switch";
 import { CustomerSearchModal, EquipmentSearchModal, RentalReview, RentalSuccessModal } from "./RentalLaunchDialogs";
 import {
   applyDeliveryAddress,
+  buildSelectedRentalItem,
   buildInitialRentalForm,
   buildRentalLaunchForm,
   customerDeliveryAddress,
   emptyDeliveryAddress,
   isMeaningfulRentalDraft,
   isRentalLaunchStoredDraft,
+  recalculateSelectedRentalItemsForPeriod,
   updateManualDeliveryAddress,
   type RentalFormState,
   type SelectedRentalItem,
@@ -100,8 +102,13 @@ export function RentalLaunchView({ draftUserId }: { draftUserId: string }) {
   function addEquipment(equipment: EquipmentSearchResult) {
     setItems((current) => current.some((item) => item.id === equipment.id)
       ? current
-      : [...current, { ...equipment, quantity: 1 }]);
+      : [...current, buildSelectedRentalItem(equipment, form.period)]);
     setEquipmentModal(false);
+  }
+
+  function changePeriod(period: RentalFormState["period"]) {
+    setForm((current) => ({ ...current, period }));
+    setItems((current) => recalculateSelectedRentalItemsForPeriod(current, period));
   }
 
   function changeQuantity(id: string, delta: number) {
@@ -161,7 +168,12 @@ export function RentalLaunchView({ draftUserId }: { draftUserId: string }) {
             onQuantityChange={changeQuantity}
             onRemove={(id) => setItems((current) => current.filter((item) => item.id !== id))}
           />
-          <PeriodSection form={form} returnDate={returnDate} onChange={setForm} />
+          <PeriodSection
+            form={form}
+            returnDate={returnDate}
+            onChange={setForm}
+            onPeriodChange={changePeriod}
+          />
           <DeliverySection customer={customer} form={form} onChange={setForm} />
           <ReceiverSection form={form} onChange={setForm} />
           <PaymentSection form={form} onChange={setForm} />
@@ -287,25 +299,33 @@ function SelectedEquipmentItem({
         <IconButton type="button" title="Aumentar quantidade" onClick={() => onQuantityChange(item.id, 1)} disabled={item.quantity >= item.stockQuantity}><Plus size={15} /></IconButton>
       </div>
       <dl className="equipment-money-grid">
-        <div><dt>Valor unitário do equipamento</dt><dd>{formatCents(item.equipmentValueCents)}</dd></div>
-        <div><dt>Subtotal do equipamento</dt><dd>{formatCents(totals.equipmentSubtotalCents)}</dd></div>
+        <div><dt>Valor unitário da locação</dt><dd>{formatCents(item.unitRentalRateCents)}</dd></div>
+        <div className="item-grand-total"><dt>Subtotal da locação</dt><dd>{formatCents(totals.itemSubtotalCents)}</dd></div>
         <div><dt>Indenização unitária</dt><dd>{formatCents(item.unitIndemnificationValueCents)}</dd></div>
-        <div><dt>Subtotal da indenização</dt><dd>{formatCents(totals.indemnificationSubtotalCents)}</dd></div>
-        <div className="item-grand-total"><dt>Total do item</dt><dd>{formatCents(totals.totalCents)}</dd></div>
       </dl>
       <IconButton className="danger" type="button" title="Remover equipamento" onClick={() => onRemove(item.id)}><Trash2 size={17} /></IconButton>
     </div>
   );
 }
 
-function PeriodSection({ form, returnDate, onChange }: { form: RentalFormState; returnDate: string; onChange(form: RentalFormState): void }) {
+function PeriodSection({
+  form,
+  returnDate,
+  onChange,
+  onPeriodChange,
+}: {
+  form: RentalFormState;
+  returnDate: string;
+  onChange(form: RentalFormState): void;
+  onPeriodChange(period: RentalFormState["period"]): void;
+}) {
   return (
     <SectionCard title="3. Período" description="A devolução é calculada automaticamente a partir da data inicial.">
       <div className="choice-group">
         <span className="field-label">Período da locação</span>
         <div className="choice-grid periods">
           {RENTAL_PERIODS.map((period) => (
-            <button className={form.period === period ? "choice-button selected" : "choice-button"} key={period} type="button" onClick={() => onChange({ ...form, period })}>
+            <button className={form.period === period ? "choice-button selected" : "choice-button"} key={period} type="button" onClick={() => onPeriodChange(period)}>
               <span>{periodLabels[period]}</span>{form.period === period && <Check size={16} />}
             </button>
           ))}

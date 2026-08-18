@@ -28,7 +28,10 @@ export const validCustomer: CustomerInput = {
 
 export const validEquipment: EquipmentInput = {
   name: "Betoneira 400L",
-  equipmentValueCents: 120000,
+  dailyRateCents: 10000,
+  weeklyRateCents: 15000,
+  biweeklyRateCents: 22000,
+  monthlyRateCents: 28000,
   unitIndemnificationValueCents: 20000,
   stockQuantity: 5
 };

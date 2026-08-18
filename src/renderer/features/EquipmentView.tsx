@@ -26,13 +26,19 @@ import {
 
 interface EquipmentForm {
   name: string;
-  equipmentValue: string;
+  dailyRate: string;
+  weeklyRate: string;
+  biweeklyRate: string;
+  monthlyRate: string;
   unitIndemnificationValue: string;
   stockQuantity: string;
 }
 const emptyForm: EquipmentForm = {
   name: "",
-  equipmentValue: "",
+  dailyRate: "",
+  weeklyRate: "",
+  biweeklyRate: "",
+  monthlyRate: "",
   unitIndemnificationValue: "",
   stockQuantity: "0",
 };
@@ -113,7 +119,10 @@ export function EquipmentView({ draftUserId }: { draftUserId: string }) {
     try {
       const input: EquipmentInput = {
         name: form.name,
-        equipmentValueCents: parseMoneyToCents(form.equipmentValue),
+        dailyRateCents: parseMoneyToCents(form.dailyRate),
+        weeklyRateCents: parseMoneyToCents(form.weeklyRate),
+        biweeklyRateCents: parseMoneyToCents(form.biweeklyRate),
+        monthlyRateCents: parseMoneyToCents(form.monthlyRate),
         unitIndemnificationValueCents: parseMoneyToCents(
           form.unitIndemnificationValue,
         ),
@@ -184,7 +193,7 @@ export function EquipmentView({ draftUserId }: { draftUserId: string }) {
     <section className="view" data-screen="equipment">
       <PageHeader
         title="Equipamentos"
-        description="Estoque, patrimônio e indenização por unidade."
+        description="Estoque, preços de locação e indenização por unidade."
         action={
           <AppButton
             variant="primary"
@@ -229,7 +238,10 @@ export function EquipmentView({ draftUserId }: { draftUserId: string }) {
                 <tr>
                   <th>Equipamento</th>
                   <th>Disponibilidade</th>
-                  <th>Valor patrimonial</th>
+                  <th>Diária</th>
+                  <th>Semanal</th>
+                  <th>Quinzenal</th>
+                  <th>Mensal</th>
                   <th>Indenização unitária</th>
                   <th className="action-column">Ações</th>
                 </tr>
@@ -251,8 +263,17 @@ export function EquipmentView({ draftUserId }: { draftUserId: string }) {
                           : "Sem estoque"}
                       </StatusBadge>
                     </td>
-                    <td data-label="Valor patrimonial">
-                      {formatCents(equipment.equipmentValueCents)}
+                    <td data-label="Diária">
+                      {formatCents(equipment.dailyRateCents)}
+                    </td>
+                    <td data-label="Semanal">
+                      {formatCents(equipment.weeklyRateCents)}
+                    </td>
+                    <td data-label="Quinzenal">
+                      {formatCents(equipment.biweeklyRateCents)}
+                    </td>
+                    <td data-label="Mensal">
+                      {formatCents(equipment.monthlyRateCents)}
                     </td>
                     <td data-label="Indenização">
                       {formatCents(equipment.unitIndemnificationValueCents)}
@@ -286,7 +307,7 @@ export function EquipmentView({ draftUserId }: { draftUserId: string }) {
         <Modal
           className="equipment-form-modal"
           title={editingId ? "Editar equipamento" : "Novo equipamento"}
-          description="Defina o item, o estoque e os valores comerciais."
+          description="Defina o item, o estoque e os preços por período."
           onClose={() => setFormOpen(false)}
           footer={
             <>
@@ -322,10 +343,34 @@ export function EquipmentView({ draftUserId }: { draftUserId: string }) {
               />
               <Field
                 required
-                label="Valor do equipamento"
-                value={form.equipmentValue}
+                label="Valor da diária"
+                value={form.dailyRate}
                 onChange={(e) =>
-                  setForm({ ...form, equipmentValue: e.target.value })
+                  setForm({ ...form, dailyRate: e.target.value })
+                }
+              />
+              <Field
+                required
+                label="Valor semanal"
+                value={form.weeklyRate}
+                onChange={(e) =>
+                  setForm({ ...form, weeklyRate: e.target.value })
+                }
+              />
+              <Field
+                required
+                label="Valor quinzenal"
+                value={form.biweeklyRate}
+                onChange={(e) =>
+                  setForm({ ...form, biweeklyRate: e.target.value })
+                }
+              />
+              <Field
+                required
+                label="Valor mensal"
+                value={form.monthlyRate}
+                onChange={(e) =>
+                  setForm({ ...form, monthlyRate: e.target.value })
                 }
               />
               <Field
@@ -380,7 +425,10 @@ export function EquipmentView({ draftUserId }: { draftUserId: string }) {
 function equipmentToForm(equipment: Equipment): EquipmentForm {
   return {
     name: equipment.name,
-    equipmentValue: formatCents(equipment.equipmentValueCents),
+    dailyRate: formatCents(equipment.dailyRateCents),
+    weeklyRate: formatCents(equipment.weeklyRateCents),
+    biweeklyRate: formatCents(equipment.biweeklyRateCents),
+    monthlyRate: formatCents(equipment.monthlyRateCents),
     unitIndemnificationValue: formatCents(
       equipment.unitIndemnificationValueCents,
     ),
@@ -391,7 +439,10 @@ function equipmentToForm(equipment: Equipment): EquipmentForm {
 function isMeaningfulEquipmentForm(form: EquipmentForm): boolean {
   return Boolean(
     form.name.trim() ||
-      form.equipmentValue.trim() ||
+      form.dailyRate.trim() ||
+      form.weeklyRate.trim() ||
+      form.biweeklyRate.trim() ||
+      form.monthlyRate.trim() ||
       form.unitIndemnificationValue.trim() ||
       form.stockQuantity.trim() !== "0",
   );
@@ -409,7 +460,10 @@ function isEquipmentFormDraft(value: unknown): value is EquipmentForm {
   const draft = value as Partial<Record<keyof EquipmentForm, unknown>>;
   return (
     typeof draft.name === "string" &&
-    typeof draft.equipmentValue === "string" &&
+    typeof draft.dailyRate === "string" &&
+    typeof draft.weeklyRate === "string" &&
+    typeof draft.biweeklyRate === "string" &&
+    typeof draft.monthlyRate === "string" &&
     typeof draft.unitIndemnificationValue === "string" &&
     typeof draft.stockQuantity === "string"
   );
