@@ -1,5 +1,9 @@
 import { Archive, ArchiveRestore, CheckCircle2, FileDown, Printer } from "lucide-react";
 import { useRef, useState } from "react";
+import {
+  getCustomerDisplayName,
+  getCustomerIdentityFields,
+} from "../../domain/customerDisplay";
 import { paymentLabels, periodLabels, rentalStatusLabels } from "../../domain/labels";
 import {
   calculateRentalItemTotals,
@@ -22,6 +26,8 @@ export function RentalDetailModal({ rental, onArchiveToggle, onClose, onFinalize
   const printingRef = useRef(false);
   const ArchiveIcon = rental.archivedAt ? ArchiveRestore : Archive;
   const totals = calculateRentalMoneyTotals(rental.items);
+  const customerName = getCustomerDisplayName(rental.customerSnapshot);
+  const customerIdentityFields = getCustomerIdentityFields(rental.customerSnapshot);
   const address = [rental.deliveryStreet, rental.deliveryNumber].filter(Boolean).join(", ");
   const addressLine = [address, rental.deliveryNeighborhood].filter(Boolean).join(" - ") || "Não informado";
   const cityLine = [rental.deliveryCity, rental.deliveryState].filter(Boolean).join(" / ");
@@ -75,7 +81,7 @@ export function RentalDetailModal({ rental, onArchiveToggle, onClose, onFinalize
       wide
       className="rental-detail-modal"
       title={rental.code}
-      description={rental.customerSnapshot.name}
+      description={customerName}
       onClose={onClose}
       footer={<>
         <AppButton variant="ghost" icon={<FileDown size={18} />} loading={savingPdf} type="button" onClick={() => void savePdf()}>Salvar em PDF</AppButton>
@@ -97,11 +103,14 @@ export function RentalDetailModal({ rental, onArchiveToggle, onClose, onFinalize
       </div>
       <div className="detail-columns">
         <section>
-          <h3>Entrega e recebimento</h3>
+          <h3>Locatário e entrega</h3>
           <dl className="detail-list">
+            {customerIdentityFields.map((field) => (
+              <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>
+            ))}
+            <div><dt>Contato</dt><dd>{rental.customerSnapshot.contact || "Não informado"}</dd></div>
             <div><dt>Endereço</dt><dd>{addressLine}</dd></div>
             <div><dt>Cidade</dt><dd>{cityAndCep}</dd></div>
-            <div><dt>Recebedor</dt><dd>{rental.receiverIsCustomer ? "O próprio locatário" : `${rental.receiverName} · ${rental.receiverCpf}`}</dd></div>
           </dl>
         </section>
         <section>

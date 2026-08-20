@@ -1,15 +1,18 @@
 import { z } from "zod";
-import { isValidCpf, onlyDigits } from "../domain/normalization";
+import { isValidCnpj, isValidCpf, onlyDigits } from "../domain/normalization";
 import {
   BRAZILIAN_STATES,
+  CUSTOMER_TYPES,
   PAYMENT_METHODS,
   RENTAL_PERIODS,
   USER_ROLES,
 } from "../domain/types";
 import type {
   CompanySettings,
+  BrazilianState,
   Customer,
   CustomerSearchResult,
+  CustomerType,
   Equipment,
   EquipmentSearchResult,
   PagedResult,
@@ -24,7 +27,6 @@ import type {
 
 const requiredText = z.string().trim().min(1, "Campo obrigatório.");
 const optionalText = z.string().trim().default("");
-const cpfField = requiredText.refine(isValidCpf, "Informe um CPF válido.");
 const cepField = requiredText.refine(
   (value) => onlyDigits(value).length === 8,
   "Informe um CEP válido.",
@@ -65,19 +67,99 @@ export const userUpdateInputSchema = z.object({
 });
 export type UserUpdateInput = z.infer<typeof userUpdateInputSchema>;
 
+export interface CustomerInput {
+  customerType: CustomerType;
+  name: string;
+  cpf: string;
+  rg: string;
+  legalName: string;
+  tradeName: string;
+  cnpj: string;
+  stateRegistration: string;
+  street: string;
+  neighborhood: string;
+  number: string;
+  cep: string;
+  city: string;
+  state: BrazilianState | "";
+  contact: string;
+}
+
 export const customerInputSchema = z.object({
-  name: requiredText,
-  cpf: cpfField,
+  customerType: z.enum(CUSTOMER_TYPES).default("PF"),
+  name: optionalText,
+  cpf: optionalText,
   rg: optionalText,
-  street: requiredText,
-  neighborhood: requiredText,
-  number: requiredText,
-  cep: cepField,
-  city: requiredText,
-  state: z.enum(BRAZILIAN_STATES),
-  contact: requiredText,
-});
-export type CustomerInput = z.infer<typeof customerInputSchema>;
+  legalName: optionalText,
+  tradeName: optionalText,
+  cnpj: optionalText,
+  stateRegistration: optionalText,
+  street: optionalText,
+  neighborhood: optionalText,
+  number: optionalText,
+  cep: optionalCepField,
+  city: optionalText,
+  state: z.enum(BRAZILIAN_STATES).or(z.literal("")).default(""),
+  contact: optionalText,
+}).superRefine((value, ctx) => {
+  if (value.customerType === "PF" && value.cpf && !isValidCpf(value.cpf)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Informe um CPF válido.",
+      path: ["cpf"],
+    });
+  }
+
+  if (value.customerType === "PJ" && value.cnpj && !isValidCnpj(value.cnpj)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Informe um CNPJ válido.",
+      path: ["cnpj"],
+    });
+  }
+
+  const hasContent = [
+    value.name,
+    value.cpf,
+    value.rg,
+    value.legalName,
+    value.tradeName,
+    value.cnpj,
+    value.stateRegistration,
+    value.street,
+    value.neighborhood,
+    value.number,
+    value.cep,
+    value.city,
+    value.contact,
+  ].some((item) => item.trim());
+
+  if (!hasContent) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Informe ao menos um dado do cliente.",
+      path: ["name"],
+    });
+  }
+}).transform((value) => {
+  if (value.customerType === "PJ") {
+    return {
+      ...value,
+      name: "",
+      cpf: "",
+      rg: "",
+    };
+  }
+
+  return {
+    ...value,
+    customerType: "PF" as const,
+    legalName: "",
+    tradeName: "",
+    cnpj: "",
+    stateRegistration: "",
+  };
+}) as z.ZodType<CustomerInput>;
 
 export const equipmentInputSchema = z.object({
   name: requiredText,
@@ -125,31 +207,11 @@ export const rentalLaunchSchema = z
     deliveryCep: optionalCepField,
     deliveryCity: optionalText,
     deliveryState: z.enum(BRAZILIAN_STATES).or(z.literal("")),
-    receiverIsCustomer: z.boolean(),
-    receiverName: optionalText,
-    receiverCpf: z.string().trim().default(""),
     paymentMethod: z.enum(PAYMENT_METHODS),
     installments: z.number().int().positive().nullable(),
     clientRequestId: z.string().uuid().optional(),
   })
   .superRefine((value, ctx) => {
-    if (!value.receiverIsCustomer) {
-      if (!value.receiverName.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Informe o nome de quem receberá os equipamentos.",
-          path: ["receiverName"],
-        });
-      }
-      if (!isValidCpf(value.receiverCpf)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Informe o CPF de quem receberá os equipamentos.",
-          path: ["receiverCpf"],
-        });
-      }
-    }
-
     if (value.paymentMethod === "CREDIT_CARD" && !value.installments) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

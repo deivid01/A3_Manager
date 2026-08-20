@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assertAdminOperationAllowed } from "../src/application/authorization";
 import { verifyPassword } from "../src/application/security";
-import { normalizeUsernameDraft } from "../src/domain/normalization";
+import { normalizeUsername, normalizeUsernameDraft } from "../src/domain/normalization";
 import { sanitizeLogMessage } from "../src/infrastructure/logging/FileLogger";
 import { createTestService } from "./helpers";
 
@@ -28,6 +28,7 @@ describe("autenticação e logs", () => {
 
   it("edita usuário preservando senha quando o campo de nova senha fica vazio", async () => {
     const { service } = await createTestService();
+    const systemDev = requireSystemDev(service);
     const created = await service.createUser({
       username: "operador",
       password: "senha123",
@@ -39,7 +40,7 @@ describe("autenticação e logs", () => {
       password: "",
       role: "ADMIN",
       active: true,
-    });
+    }, systemDev.id);
 
     expect(updated).toMatchObject({
       username: "OPERADOR EDITADO",
@@ -55,7 +56,7 @@ describe("autenticação e logs", () => {
       password: "novaSenha123",
       role: "USER",
       active: true,
-    });
+    }, systemDev.id);
 
     await expect(
       service.login({ username: "operador editado", password: "senha123" }),
@@ -65,30 +66,65 @@ describe("autenticação e logs", () => {
     ).resolves.toMatchObject({ role: "USER" });
   });
 
-  it("impede remover o último administrador ativo", async () => {
+  it("protege SYSTEM DEV contra edição por outro administrador", async () => {
     const { service } = await createTestService();
-    const admin = service.listUsers().find((user) => user.role === "ADMIN" && user.active);
+    const systemDev = requireSystemDev(service);
+    const manager = await service.createUser({
+      username: "gerente",
+      password: "senha123",
+      role: "ADMIN",
+    });
 
-    expect(admin).toBeDefined();
-    if (!admin) {
-      throw new Error("Administrador inicial não encontrado.");
-    }
     await expect(
-      service.updateUser(admin.id, {
-        username: admin.username,
-        password: "",
-        role: "USER",
+      service.updateUser(systemDev.id, {
+        username: systemDev.username,
+        password: "senhaNova123",
+        role: "ADMIN",
         active: true,
-      }),
-    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      }, manager.id),
+    ).rejects.toMatchObject({ code: "AUTH_FORBIDDEN" });
     await expect(
-      service.updateUser(admin.id, {
-        username: admin.username,
+      service.login({ username: "SYSTEM DEV", password: "_int@383" }),
+    ).resolves.toMatchObject({ id: systemDev.id });
+    await expect(
+      service.login({ username: "SYSTEM DEV", password: "senhaNova123" }),
+    ).rejects.toMatchObject({ code: "AUTH_INVALID" });
+  });
+
+  it("permite que o próprio SYSTEM DEV altere somente a própria senha", async () => {
+    const { service } = await createTestService();
+    const systemDev = requireSystemDev(service);
+
+    await service.updateUser(systemDev.id, {
+      username: systemDev.username,
+      password: "senhaNova123",
+      role: "ADMIN",
+      active: true,
+    }, systemDev.id);
+
+    await expect(
+      service.login({ username: "SYSTEM DEV", password: "_int@383" }),
+    ).rejects.toMatchObject({ code: "AUTH_INVALID" });
+    await expect(
+      service.login({ username: "SYSTEM DEV", password: "senhaNova123" }),
+    ).resolves.toMatchObject({ id: systemDev.id });
+
+    await expect(
+      service.updateUser(systemDev.id, {
+        username: "outro nome",
         password: "",
         role: "ADMIN",
+        active: true,
+      }, systemDev.id),
+    ).rejects.toMatchObject({ code: "AUTH_FORBIDDEN" });
+    await expect(
+      service.updateUser(systemDev.id, {
+        username: systemDev.username,
+        password: "",
+        role: "USER",
         active: false,
-      }),
-    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+      }, systemDev.id),
+    ).rejects.toMatchObject({ code: "AUTH_FORBIDDEN" });
   });
 
   it("restringe gerenciamento de usuários e configuração remota a administradores", () => {
@@ -152,3 +188,15 @@ describe("autenticação e logs", () => {
     expect(sanitized).toContain("[REDACTED]");
   });
 });
+
+function requireSystemDev(service: {
+  listUsers(): Array<{ id: string; username: string }>;
+}) {
+  const user = service
+    .listUsers()
+    .find((item) => normalizeUsername(item.username) === "SYSTEM DEV");
+  if (!user) {
+    throw new Error("Usuário SYSTEM DEV não encontrado.");
+  }
+  return user;
+}

@@ -1,7 +1,12 @@
-import { Archive, Edit3, Eraser, RotateCcw, SearchX, UserPlus } from "lucide-react";
+import { Archive, Check, Edit3, Eraser, RotateCcw, SearchX, UserPlus } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
-import { formatCep, formatCpf } from "../../domain/normalization";
-import type { Customer } from "../../domain/types";
+import {
+  customerTypeLabels,
+  getCustomerDisplayName,
+  getCustomerPrimaryDocument,
+} from "../../domain/customerDisplay";
+import { formatCep, formatCnpj, formatCpf } from "../../domain/normalization";
+import { CUSTOMER_TYPES, type Customer, type CustomerType } from "../../domain/types";
 import type { CustomerInput } from "../../shared/contracts";
 import {
   AppButton,
@@ -25,15 +30,20 @@ import {
 } from "../lib/formDrafts";
 
 const emptyForm: CustomerInput = {
+  customerType: "PF",
   name: "",
   cpf: "",
   rg: "",
+  legalName: "",
+  tradeName: "",
+  cnpj: "",
+  stateRegistration: "",
   street: "",
   neighborhood: "",
   number: "",
   cep: "",
   city: "",
-  state: "SP",
+  state: "",
   contact: "",
 };
 
@@ -177,7 +187,7 @@ export function CustomersView({ draftUserId }: { draftUserId: string }) {
     <section className="view" data-screen="customers">
       <PageHeader
         title="Clientes"
-        description="Locatários, CPF, contato e endereço."
+        description="Locatários, documentos, contato e endereço."
         action={
           <AppButton
             variant="primary"
@@ -200,7 +210,7 @@ export function CustomersView({ draftUserId }: { draftUserId: string }) {
           <SearchField
             value={search}
             onChange={setSearch}
-            placeholder="Buscar por nome ou CPF"
+            placeholder="Buscar por nome, CPF ou CNPJ"
             onSearch={() => void load()}
           />
         }
@@ -222,7 +232,7 @@ export function CustomersView({ draftUserId }: { draftUserId: string }) {
               <thead>
                 <tr>
                   <th>Cliente</th>
-                  <th>CPF</th>
+                  <th>Documento</th>
                   <th>Contato</th>
                   <th>Cidade</th>
                   <th className="action-column">Ações</th>
@@ -230,35 +240,12 @@ export function CustomersView({ draftUserId }: { draftUserId: string }) {
               </thead>
               <tbody>
                 {rows.map((customer) => (
-                  <tr key={customer.id}>
-                    <td data-label="Cliente">
-                      <strong>{customer.name}</strong>
-                    </td>
-                    <td data-label="CPF">{customer.cpf}</td>
-                    <td data-label="Contato">
-                      {customer.contact || "Não informado"}
-                    </td>
-                    <td data-label="Cidade">
-                      {customer.city} / {customer.state}
-                    </td>
-                    <td data-label="Ações" className="row-actions">
-                      <IconButton
-                        type="button"
-                        title="Editar cliente"
-                        onClick={() => startEdit(customer)}
-                      >
-                        <Edit3 size={17} />
-                      </IconButton>
-                      <IconButton
-                        className="danger"
-                        type="button"
-                        title="Arquivar cliente"
-                        onClick={() => setArchiveTarget(customer)}
-                      >
-                        <Archive size={17} />
-                      </IconButton>
-                    </td>
-                  </tr>
+                  <CustomerRow
+                    customer={customer}
+                    key={customer.id}
+                    onArchive={() => setArchiveTarget(customer)}
+                    onEdit={() => startEdit(customer)}
+                  />
                 ))}
               </tbody>
             </table>
@@ -297,55 +284,97 @@ export function CustomersView({ draftUserId }: { draftUserId: string }) {
           }
         >
           <form id="customer-form" className="dialog-form" onSubmit={submit}>
+            <CustomerTypeSelector
+              value={form.customerType}
+              onChange={(customerType) => setForm(selectCustomerType(form, customerType))}
+            />
             <div className="form-section">
               <h3>Identificação</h3>
-              <div className="form-grid two">
-                <Field
-                  required
-                  label="Nome completo"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
-                <Field
-                  required
-                  label="CPF"
-                  value={form.cpf}
-                  onChange={(e) =>
-                    setForm({ ...form, cpf: formatCpf(e.target.value) })
-                  }
-                />
-                <Field
-                  label="RG"
-                  value={form.rg}
-                  onChange={(e) => setForm({ ...form, rg: e.target.value })}
-                />
-                <Field
-                  label="Contato"
-                  value={form.contact}
-                  onChange={(e) =>
-                    setForm({ ...form, contact: e.target.value })
-                  }
-                />
-              </div>
+              {form.customerType === "PF" ? (
+                <div className="form-grid two">
+                  <Field
+                    label="Nome completo"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                  <Field
+                    label="CPF"
+                    value={form.cpf}
+                    onChange={(e) =>
+                      setForm({ ...form, cpf: formatCpf(e.target.value) })
+                    }
+                  />
+                  <Field
+                    label="RG"
+                    value={form.rg}
+                    onChange={(e) => setForm({ ...form, rg: e.target.value })}
+                  />
+                  <Field
+                    label="Contato"
+                    value={form.contact}
+                    onChange={(e) =>
+                      setForm({ ...form, contact: e.target.value })
+                    }
+                  />
+                </div>
+              ) : (
+                <div className="form-grid two">
+                  <Field
+                    label="Razão social"
+                    value={form.legalName}
+                    onChange={(e) =>
+                      setForm({ ...form, legalName: e.target.value })
+                    }
+                  />
+                  <Field
+                    label="Nome fantasia"
+                    value={form.tradeName}
+                    onChange={(e) =>
+                      setForm({ ...form, tradeName: e.target.value })
+                    }
+                  />
+                  <Field
+                    label="CNPJ"
+                    value={form.cnpj}
+                    onChange={(e) =>
+                      setForm({ ...form, cnpj: formatCnpj(e.target.value) })
+                    }
+                  />
+                  <Field
+                    label="Inscrição estadual"
+                    value={form.stateRegistration}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        stateRegistration: e.target.value,
+                      })
+                    }
+                  />
+                  <Field
+                    label="Contato"
+                    value={form.contact}
+                    onChange={(e) =>
+                      setForm({ ...form, contact: e.target.value })
+                    }
+                  />
+                </div>
+              )}
             </div>
             <div className="form-section">
               <h3>Endereço</h3>
               <div className="form-grid address">
                 <Field
-                  required
                   className="span-two"
                   label="Rua"
                   value={form.street}
                   onChange={(e) => setForm({ ...form, street: e.target.value })}
                 />
                 <Field
-                  required
                   label="Número"
                   value={form.number}
                   onChange={(e) => setForm({ ...form, number: e.target.value })}
                 />
                 <Field
-                  required
                   label="Bairro"
                   value={form.neighborhood}
                   onChange={(e) =>
@@ -353,7 +382,6 @@ export function CustomersView({ draftUserId }: { draftUserId: string }) {
                   }
                 />
                 <Field
-                  required
                   label="CEP"
                   value={form.cep}
                   onChange={(e) =>
@@ -361,12 +389,12 @@ export function CustomersView({ draftUserId }: { draftUserId: string }) {
                   }
                 />
                 <Field
-                  required
                   label="Cidade"
                   value={form.city}
                   onChange={(e) => setForm({ ...form, city: e.target.value })}
                 />
                 <UfSelect
+                  allowEmpty
                   value={form.state}
                   onChange={(e) =>
                     setForm({
@@ -384,7 +412,7 @@ export function CustomersView({ draftUserId }: { draftUserId: string }) {
       {archiveTarget && (
         <ConfirmDialog
           title="Arquivar cliente?"
-          description={`${archiveTarget.name} deixará de aparecer nos cadastros ativos.`}
+          description={`${getCustomerDisplayName(archiveTarget)} deixará de aparecer nos cadastros ativos.`}
           confirmLabel="Arquivar"
           onClose={() => setArchiveTarget(null)}
           onConfirm={() => void confirmArchive()}
@@ -407,11 +435,87 @@ export function CustomersView({ draftUserId }: { draftUserId: string }) {
   );
 }
 
+function CustomerRow({
+  customer,
+  onArchive,
+  onEdit,
+}: {
+  customer: Customer;
+  onArchive(): void;
+  onEdit(): void;
+}) {
+  const document = getCustomerPrimaryDocument(customer);
+  const documentText = document.value
+    ? `${document.label} ${document.value}`
+    : "Não informado";
+
+  return (
+    <tr>
+      <td data-label="Cliente">
+        <strong>{getCustomerDisplayName(customer)}</strong>
+      </td>
+      <td data-label="Documento">{documentText}</td>
+      <td data-label="Contato">{customer.contact || "Não informado"}</td>
+      <td data-label="Cidade">
+        {[customer.city, customer.state].filter(Boolean).join(" / ") ||
+          "Não informado"}
+      </td>
+      <td data-label="Ações" className="row-actions">
+        <IconButton type="button" title="Editar cliente" onClick={onEdit}>
+          <Edit3 size={17} />
+        </IconButton>
+        <IconButton
+          className="danger"
+          type="button"
+          title="Arquivar cliente"
+          onClick={onArchive}
+        >
+          <Archive size={17} />
+        </IconButton>
+      </td>
+    </tr>
+  );
+}
+
+function CustomerTypeSelector({
+  value,
+  onChange,
+}: {
+  value: CustomerType;
+  onChange(value: CustomerType): void;
+}) {
+  return (
+    <div className="choice-group">
+      <span className="field-label">Tipo de cliente</span>
+      <div className="form-grid two">
+        {CUSTOMER_TYPES.map((customerType) => (
+          <button
+            className={
+              value === customerType ? "choice-button selected" : "choice-button"
+            }
+            key={customerType}
+            type="button"
+            onClick={() => onChange(customerType)}
+          >
+            <span>{customerTypeLabels[customerType]}</span>
+            {value === customerType && <Check size={16} />}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function customerToForm(customer: Customer): CustomerInput {
   return {
+    customerType: customer.customerType,
     name: customer.name,
     cpf: customer.cpf,
     rg: customer.rg,
+    legalName: customer.legalName,
+    tradeName: customer.tradeName,
+    cnpj: customer.cnpj,
+    stateRegistration: customer.stateRegistration,
     street: customer.street,
     neighborhood: customer.neighborhood,
     number: customer.number,
@@ -422,11 +526,39 @@ function customerToForm(customer: Customer): CustomerInput {
   };
 }
 
+function selectCustomerType(
+  form: CustomerInput,
+  customerType: CustomerType,
+): CustomerInput {
+  if (customerType === "PJ") {
+    return {
+      ...form,
+      customerType,
+      name: "",
+      cpf: "",
+      rg: "",
+    };
+  }
+
+  return {
+    ...form,
+    customerType,
+    legalName: "",
+    tradeName: "",
+    cnpj: "",
+    stateRegistration: "",
+  };
+}
+
 function isMeaningfulCustomerForm(form: CustomerInput): boolean {
   return Boolean(
     form.name.trim() ||
       form.cpf.trim() ||
       form.rg.trim() ||
+      form.legalName.trim() ||
+      form.tradeName.trim() ||
+      form.cnpj.trim() ||
+      form.stateRegistration.trim() ||
       form.street.trim() ||
       form.neighborhood.trim() ||
       form.number.trim() ||
@@ -447,9 +579,14 @@ function isCustomerInputDraft(value: unknown): value is CustomerInput {
   if (!value || typeof value !== "object") return false;
   const draft = value as Partial<Record<keyof CustomerInput, unknown>>;
   return (
+    (draft.customerType === "PF" || draft.customerType === "PJ") &&
     typeof draft.name === "string" &&
     typeof draft.cpf === "string" &&
     typeof draft.rg === "string" &&
+    typeof draft.legalName === "string" &&
+    typeof draft.tradeName === "string" &&
+    typeof draft.cnpj === "string" &&
+    typeof draft.stateRegistration === "string" &&
     typeof draft.street === "string" &&
     typeof draft.neighborhood === "string" &&
     typeof draft.number === "string" &&

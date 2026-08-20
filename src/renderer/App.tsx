@@ -47,6 +47,7 @@ import {
   type AppearanceMode,
   type ResolvedTheme,
 } from "./theme";
+import { getRendererPlatform } from "./platform/rendererPlatform";
 
 type ViewKey =
   | "rentals"
@@ -74,6 +75,7 @@ export function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>("rentals");
   const appearance = useAppearance();
+  const isDesktop = getRendererPlatform() === "desktop";
   const [appInfo, setAppInfo] = useState<AppInfo>({
     name: "A3 Manager",
     version: "",
@@ -88,8 +90,8 @@ export function App() {
   }, []);
 
   return (
-    <div className="desktop-window">
-      <WindowTitlebar />
+    <div className={isDesktop ? "desktop-window" : "desktop-window native-window"}>
+      {isDesktop && <WindowTitlebar />}
       <div className="window-body">
         {!currentUser ? (
           <LoginView appInfo={appInfo} onLogin={setCurrentUser} />
@@ -253,7 +255,7 @@ function AuthenticatedShell({
           />
         )}
         {activeView === "users" && currentUser.role === "ADMIN" && (
-          <UsersView draftUserId={currentUser.id} />
+          <UsersView currentUser={currentUser} draftUserId={currentUser.id} />
         )}
       </main>
     </div>

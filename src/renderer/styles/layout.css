@@ -1,4 +1,5 @@
 .desktop-window { background: var(--background-primary); display: grid; grid-template-rows: 38px minmax(0, 1fr); height: 100%; inset: 0; overflow: clip; position: fixed; width: 100%; }
+.desktop-window.native-window { grid-template-rows: minmax(0, 1fr); height: 100dvh; padding-bottom: env(safe-area-inset-bottom); padding-top: env(safe-area-inset-top); }
 .window-body { height: 100%; min-height: 0; min-width: 0; overflow: clip; }
 
 .window-titlebar {

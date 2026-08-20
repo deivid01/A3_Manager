@@ -15,11 +15,12 @@ import {
   type EffectiveA20sConfig,
 } from "./A20sConfigStore";
 import {
-  buildRemoteSchemaScript,
+  buildRemoteMigrationScript,
   deleteOrder,
   remoteMigrations,
   syncTableByName,
   syncTables,
+  type RemoteMigration,
   type SyncTableMetadata,
   type SyncTableName,
 } from "./syncTables";
@@ -309,7 +310,7 @@ export class SyncCoordinator {
 
     if (!hasMarker && !hasBusinessTables) {
       const backupPath = this.db.createBackup("before-a20s-bootstrap");
-      await client.script(buildRemoteSchemaScript());
+      await this.initializeRemoteSchema(client);
       await this.bootstrapRemoteFromLocal(client, backupPath);
       return { completedInitialSync: true };
     }
@@ -399,6 +400,18 @@ export class SyncCoordinator {
     `);
   }
 
+  private async initializeRemoteSchema(client: A20sDbClientLike): Promise<void> {
+    await client.script(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at TEXT NOT NULL
+      );
+    `);
+    await this.applyRemoteMigrations(client);
+    await this.createRemoteMarker(client);
+  }
+
   private async applyRemoteMigrations(client: A20sDbClientLike): Promise<void> {
     const result = await client.query<{ id: number | string }>(
       "SELECT id FROM schema_migrations ORDER BY id",
@@ -411,19 +424,42 @@ export class SyncCoordinator {
       return;
     }
 
-    await client.script(`
-      BEGIN;
-      ${pending
-        .map(
-          (migration) => `
-            ${migration.sql}
-            INSERT OR IGNORE INTO schema_migrations (id, name, applied_at)
-            VALUES (${migration.id}, ${sqlLiteral(migration.name)}, CURRENT_TIMESTAMP);
-          `,
-        )
-        .join("\n")}
-      COMMIT;
-    `);
+    for (const migration of pending) {
+      await this.applyRemoteMigration(client, migration);
+    }
+  }
+
+  private async applyRemoteMigration(
+    client: A20sDbClientLike,
+    migration: RemoteMigration,
+  ): Promise<void> {
+    try {
+      await client.script(buildRemoteMigrationScript(migration));
+      await this.assertRemoteForeignKeys(client, migration);
+    } catch (error) {
+      await this.cleanupFailedRemoteMigration(client);
+      throw error;
+    }
+  }
+
+  private async assertRemoteForeignKeys(
+    client: A20sDbClientLike,
+    migration: RemoteMigration,
+  ): Promise<void> {
+    const result = await client.query<DbRow>("PRAGMA foreign_key_check");
+    if (result.rows.length > 0) {
+      throw new AppError(
+        "A3-SYNC-004",
+        `Migração remota ${migration.id} (${migration.name}) deixou violações de chave estrangeira.`,
+      );
+    }
+  }
+
+  private async cleanupFailedRemoteMigration(
+    client: A20sDbClientLike,
+  ): Promise<void> {
+    await ignoreRemoteCleanupError(() => client.script("ROLLBACK;"));
+    await ignoreRemoteCleanupError(() => client.script("PRAGMA foreign_keys = ON;"));
   }
 
   private async verifyRemoteSchema(client: A20sDbClientLike): Promise<void> {
@@ -887,6 +923,12 @@ function roundDuration(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-function sqlLiteral(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
+async function ignoreRemoteCleanupError(
+  operation: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    await operation();
+  } catch {
+    // Best-effort cleanup must preserve the original migration error.
+  }
 }

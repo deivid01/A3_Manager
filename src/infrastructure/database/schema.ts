@@ -361,6 +361,16 @@ export const migrations: Migration[] = [
     id: 4,
     name: "rental_period_pricing_catalog_and_archives",
     sql: buildRentalPeriodPricingCatalogAndArchivesSql(),
+  },
+  {
+    id: 5,
+    name: "customer_pf_pj_identity",
+    sql: buildCustomerPfPjIdentitySql(),
+  },
+  {
+    id: 6,
+    name: "recreate_customer_outbox_triggers",
+    sql: buildCustomerOutboxTriggersSql(),
   }
 ];
 
@@ -437,6 +447,121 @@ function buildDefaultEquipmentInsertSql(
         WHERE id = ${sqlLiteral(item.id)}
            OR name_normalized = ${sqlLiteral(normalizeSearch(item.name))}
       );
+    `;
+}
+
+function buildCustomerPfPjIdentitySql(): string {
+  return `
+      PRAGMA foreign_keys = OFF;
+
+      DROP TABLE IF EXISTS customers_v5;
+      CREATE TABLE customers_v5 (
+        id TEXT PRIMARY KEY,
+        customer_type TEXT NOT NULL DEFAULT 'PF' CHECK (customer_type IN ('PF', 'PJ')),
+        name TEXT NOT NULL DEFAULT '',
+        name_normalized TEXT NOT NULL DEFAULT '',
+        cpf TEXT NOT NULL DEFAULT '',
+        cpf_normalized TEXT,
+        rg TEXT NOT NULL DEFAULT '',
+        legal_name TEXT,
+        legal_name_normalized TEXT,
+        trade_name TEXT,
+        trade_name_normalized TEXT,
+        cnpj TEXT,
+        cnpj_normalized TEXT,
+        state_registration TEXT,
+        street TEXT NOT NULL DEFAULT '',
+        neighborhood TEXT NOT NULL DEFAULT '',
+        number TEXT NOT NULL DEFAULT '',
+        cep TEXT NOT NULL DEFAULT '',
+        city TEXT NOT NULL DEFAULT '',
+        state TEXT NOT NULL DEFAULT '',
+        contact TEXT NOT NULL DEFAULT '',
+        archived_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      INSERT INTO customers_v5
+        (id, customer_type, name, name_normalized, cpf, cpf_normalized, rg,
+         legal_name, legal_name_normalized, trade_name, trade_name_normalized,
+         cnpj, cnpj_normalized, state_registration, street, neighborhood,
+         number, cep, city, state, contact, archived_at, created_at, updated_at)
+      SELECT
+        id,
+        'PF',
+        name,
+        name_normalized,
+        cpf,
+        NULLIF(cpf_normalized, ''),
+        rg,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        street,
+        neighborhood,
+        number,
+        cep,
+        city,
+        state,
+        contact,
+        archived_at,
+        created_at,
+        updated_at
+      FROM customers;
+
+      DROP TABLE customers;
+      ALTER TABLE customers_v5 RENAME TO customers;
+
+      CREATE INDEX IF NOT EXISTS idx_customers_name_normalized ON customers(name_normalized);
+      CREATE INDEX IF NOT EXISTS idx_customers_cpf_normalized ON customers(cpf_normalized);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_cpf_unique
+        ON customers(cpf_normalized)
+        WHERE cpf_normalized IS NOT NULL AND cpf_normalized <> '';
+      CREATE INDEX IF NOT EXISTS idx_customers_legal_name_normalized
+        ON customers(legal_name_normalized);
+      CREATE INDEX IF NOT EXISTS idx_customers_trade_name_normalized
+        ON customers(trade_name_normalized);
+      CREATE INDEX IF NOT EXISTS idx_customers_cnpj_normalized
+        ON customers(cnpj_normalized);
+
+      PRAGMA foreign_keys = ON;
+    `;
+}
+
+function buildCustomerOutboxTriggersSql(): string {
+  return `
+      DROP TRIGGER IF EXISTS trg_sync_customers_insert;
+      DROP TRIGGER IF EXISTS trg_sync_customers_update;
+      DROP TRIGGER IF EXISTS trg_sync_customers_delete;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_customers_insert
+      AFTER INSERT ON customers
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'customers', NEW.id, 'INSERT', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_customers_update
+      AFTER UPDATE ON customers
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'customers', NEW.id, 'UPDATE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
+
+      CREATE TRIGGER IF NOT EXISTS trg_sync_customers_delete
+      AFTER DELETE ON customers
+      WHEN COALESCE((SELECT value FROM sync_runtime_flags WHERE key = 'suppress_outbox'), '0') <> '1'
+      BEGIN
+        INSERT INTO sync_outbox (event_id, table_name, row_id, operation, created_at)
+        VALUES (lower(hex(randomblob(16))), 'customers', OLD.id, 'DELETE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      END;
     `;
 }
 

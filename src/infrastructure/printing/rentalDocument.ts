@@ -1,5 +1,9 @@
 import { paymentLabels, periodLabels, rentalStatusLabels } from "../../domain/labels";
 import {
+  getCustomerDisplayName,
+  getCustomerIdentityFields,
+} from "../../domain/customerDisplay";
+import {
   calculateRentalItemTotals,
   calculateRentalMoneyTotals,
   formatCents
@@ -14,6 +18,12 @@ export function renderRentalDocumentHtml(
 ): string {
   const company = rental.companySnapshot;
   const customer = rental.customerSnapshot;
+  const customerIdentityRows = getCustomerIdentityFields(customer)
+    .map(
+      (field) =>
+        `<div><strong>${escapeHtml(field.label)}:</strong> ${escapeHtml(field.value)}</div>`,
+    )
+    .join("");
   const rows = rental.items
     .map((item) => {
       const totals = calculateRentalItemTotals(item);
@@ -135,9 +145,8 @@ export function renderRentalDocumentHtml(
 
           <h2>Locatário</h2>
           <div class="grid">
-            <div><strong>Nome:</strong> ${escapeHtml(customer.name)}</div>
-            <div><strong>CPF:</strong> ${escapeHtml(customer.cpf)}</div>
-            <div><strong>RG:</strong> ${escapeHtml(customer.rg || "Não informado")}</div>
+            <div><strong>Locatário:</strong> ${escapeHtml(getCustomerDisplayName(customer))}</div>
+            ${customerIdentityRows}
             <div><strong>Contato:</strong> ${escapeHtml(customer.contact)}</div>
             <div><strong>Endereço:</strong> ${escapeHtml(customer.street)}, ${escapeHtml(customer.number)} - ${escapeHtml(customer.neighborhood)}</div>
             <div><strong>Cidade/UF:</strong> ${escapeHtml(customer.city)} - ${escapeHtml(customer.state)}</div>
@@ -151,10 +160,9 @@ export function renderRentalDocumentHtml(
             <div><strong>Pagamento:</strong> ${paymentLabels[rental.paymentMethod]}${rental.installments ? ` em ${rental.installments} parcela(s)` : ""}</div>
           </div>
 
-          <h2>Entrega e recebimento</h2>
+          <h2>Entrega</h2>
           <div class="grid">
             <div><strong>Endereço de entrega:</strong> ${formatDelivery(rental)}</div>
-            <div><strong>Responsável pelo recebimento:</strong> ${receiverText(rental)}</div>
           </div>
 
           <h2>Equipamentos</h2>
@@ -186,7 +194,7 @@ export function renderRentalDocumentHtml(
             </div>
             <div class="signature">
               <div class="line">Assinatura da A3 Locação</div>
-              <div class="line">Assinatura do locatário ou recebedor</div>
+              <div class="line">Assinatura do locatário</div>
             </div>
             <p class="muted">Documento gerado pelo A3 Manager.</p>
           </section>
@@ -211,13 +219,6 @@ function formatDelivery(rental: RentalDetail): string {
     rental.deliveryState
   ].filter(Boolean);
   return escapeHtml(parts.length ? parts.join(", ") : "Não informado");
-}
-
-function receiverText(rental: RentalDetail): string {
-  if (rental.receiverIsCustomer) {
-    return "O próprio locatário";
-  }
-  return `${escapeHtml(rental.receiverName)} - CPF ${escapeHtml(rental.receiverCpf)}`;
 }
 
 function escapeHtml(value: string): string {

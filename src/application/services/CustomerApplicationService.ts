@@ -1,8 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { normalizeSearch, onlyDigits } from "../../domain/normalization";
 import type { Customer, CustomerSearchResult } from "../../domain/types";
 import type {
   DbParam,
+  DbRow,
   SqlJsDatabase,
 } from "../../infrastructure/database/SqlJsDatabase";
 import {
@@ -15,6 +15,7 @@ import {
   mustFind,
   parseInput,
 } from "../serviceHelpers";
+import { createId } from "../ids";
 
 export class CustomerApplicationService {
   constructor(private readonly db: SqlJsDatabase) {}
@@ -25,12 +26,19 @@ export class CustomerApplicationService {
     const params: DbParam[] = [];
     let where = "archived_at IS NULL";
     if (normalized || digits) {
-      where += " AND (name_normalized LIKE ? OR cpf_normalized LIKE ?)";
-      params.push(`${normalized}%`, `${digits}%`);
+      where += ` AND (${customerSearchWhere()})`;
+      params.push(
+        `${normalized}%`,
+        `${digits}%`,
+        `${normalized}%`,
+        `${normalized}%`,
+        `${digits}%`,
+      );
     }
     return this.db
       .queryAll(
-        `SELECT * FROM customers WHERE ${where} ORDER BY name_normalized ASC LIMIT 100`,
+        `SELECT * FROM customers WHERE ${where}
+         ORDER BY ${customerDisplayOrderSql()} ASC LIMIT 100`,
         params,
       )
       .map(mapCustomer);
@@ -42,42 +50,47 @@ export class CustomerApplicationService {
     if (normalized.length < 2 && digits.length < 3) return [];
     return this.db
       .queryAll(
-        `SELECT id, name, cpf, street, neighborhood, number, cep, city, state, contact FROM customers
-       WHERE archived_at IS NULL AND (name_normalized LIKE ? OR cpf_normalized LIKE ?)
-       ORDER BY name_normalized ASC LIMIT 10`,
-        [`${normalized}%`, `${digits}%`],
+        `SELECT * FROM customers
+       WHERE archived_at IS NULL AND (${customerSearchWhere()})
+       ORDER BY ${customerDisplayOrderSql()} ASC LIMIT 10`,
+        [
+          `${normalized}%`,
+          `${digits}%`,
+          `${normalized}%`,
+          `${normalized}%`,
+          `${digits}%`,
+        ],
       )
-      .map((row) => ({
-        id: String(row.id),
-        name: String(row.name),
-        cpf: String(row.cpf),
-        street: String(row.street),
-        neighborhood: String(row.neighborhood),
-        number: String(row.number),
-        cep: String(row.cep),
-        city: String(row.city),
-        state: String(row.state),
-        contact: String(row.contact),
-      }));
+      .map(mapCustomerSearchResult);
   }
 
   create(input: CustomerInput): Customer {
     const data = parseInput(customerInputSchema, input);
     const now = new Date().toISOString();
-    const id = randomUUID();
+    const id = createId();
     try {
       this.db.execute(
         `INSERT INTO customers
-          (id, name, name_normalized, cpf, cpf_normalized, rg, street, neighborhood,
+          (id, customer_type, name, name_normalized, cpf, cpf_normalized, rg,
+           legal_name, legal_name_normalized, trade_name, trade_name_normalized,
+           cnpj, cnpj_normalized, state_registration, street, neighborhood,
            number, cep, city, state, contact, archived_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
         [
           id,
+          data.customerType,
           data.name,
           normalizeSearch(data.name),
           data.cpf,
-          onlyDigits(data.cpf),
+          normalizedDocument(data.cpf),
           data.rg ?? "",
+          nullIfBlank(data.legalName),
+          normalizedOrNull(data.legalName),
+          nullIfBlank(data.tradeName),
+          normalizedOrNull(data.tradeName),
+          nullIfBlank(data.cnpj),
+          normalizedDocument(data.cnpj),
+          nullIfBlank(data.stateRegistration),
           data.street,
           data.neighborhood,
           data.number,
@@ -103,15 +116,26 @@ export class CustomerApplicationService {
     try {
       this.db.execute(
         `UPDATE customers SET
-          name = ?, name_normalized = ?, cpf = ?, cpf_normalized = ?, rg = ?,
-          street = ?, neighborhood = ?, number = ?, cep = ?, city = ?, state = ?,
+          customer_type = ?, name = ?, name_normalized = ?, cpf = ?,
+          cpf_normalized = ?, rg = ?, legal_name = ?,
+          legal_name_normalized = ?, trade_name = ?, trade_name_normalized = ?,
+          cnpj = ?, cnpj_normalized = ?, state_registration = ?, street = ?,
+          neighborhood = ?, number = ?, cep = ?, city = ?, state = ?,
           contact = ?, updated_at = ? WHERE id = ? AND archived_at IS NULL`,
         [
+          data.customerType,
           data.name,
           normalizeSearch(data.name),
           data.cpf,
-          onlyDigits(data.cpf),
+          normalizedDocument(data.cpf),
           data.rg ?? "",
+          nullIfBlank(data.legalName),
+          normalizedOrNull(data.legalName),
+          nullIfBlank(data.tradeName),
+          normalizedOrNull(data.tradeName),
+          nullIfBlank(data.cnpj),
+          normalizedDocument(data.cnpj),
+          nullIfBlank(data.stateRegistration),
           data.street,
           data.neighborhood,
           data.number,
@@ -139,4 +163,65 @@ export class CustomerApplicationService {
       [now, now, id],
     );
   }
+}
+
+function customerSearchWhere(): string {
+  return [
+    "name_normalized LIKE ?",
+    "cpf_normalized LIKE ?",
+    "legal_name_normalized LIKE ?",
+    "trade_name_normalized LIKE ?",
+    "cnpj_normalized LIKE ?",
+  ].join(" OR ");
+}
+
+function customerDisplayOrderSql(): string {
+  return `
+    CASE customer_type
+      WHEN 'PJ' THEN COALESCE(
+        NULLIF(trade_name_normalized, ''),
+        NULLIF(legal_name_normalized, ''),
+        NULLIF(cnpj_normalized, ''),
+        ''
+      )
+      ELSE COALESCE(NULLIF(name_normalized, ''), NULLIF(cpf_normalized, ''), '')
+    END
+  `;
+}
+
+function mapCustomerSearchResult(row: DbRow): CustomerSearchResult {
+  const customer = mapCustomer(row);
+  return {
+    id: customer.id,
+    customerType: customer.customerType,
+    name: customer.name,
+    cpf: customer.cpf,
+    rg: customer.rg,
+    legalName: customer.legalName,
+    tradeName: customer.tradeName,
+    cnpj: customer.cnpj,
+    stateRegistration: customer.stateRegistration,
+    street: customer.street,
+    neighborhood: customer.neighborhood,
+    number: customer.number,
+    cep: customer.cep,
+    city: customer.city,
+    state: customer.state,
+    contact: customer.contact,
+  };
+}
+
+function normalizedDocument(value: string): string | null {
+  const digits = onlyDigits(value);
+  return digits ? digits : null;
+}
+
+function normalizedOrNull(value: string): string | null {
+  const normalized = normalizeSearch(value);
+  return normalized ? normalized : null;
+}
+
+function nullIfBlank(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }

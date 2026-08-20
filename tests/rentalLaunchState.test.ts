@@ -14,8 +14,14 @@ import type { CustomerSearchResult, EquipmentSearchResult } from "../src/domain/
 
 const customer: CustomerSearchResult = {
   id: "customer-1",
+  customerType: "PF",
   name: "Maria Oliveira",
   cpf: "529.982.247-25",
+  rg: "12.345.678-9",
+  legalName: "",
+  tradeName: "",
+  cnpj: "",
+  stateRegistration: "",
   street: "Rua Central",
   neighborhood: "Centro",
   number: "100",
@@ -45,6 +51,9 @@ describe("estado da Nova Locação", () => {
     expect(launchForm.deliveryStreet).toBe("Rua Central");
     expect(launchForm.deliveryNumber).toBe("100");
     expect(launchForm.deliveryState).toBe("SP");
+    expect(launchForm).not.toHaveProperty("receiverIsCustomer");
+    expect(launchForm).not.toHaveProperty("receiverName");
+    expect(launchForm).not.toHaveProperty("receiverCpf");
   });
 
   it("preserva endereço manual ao alternar entre Não e Sim", () => {

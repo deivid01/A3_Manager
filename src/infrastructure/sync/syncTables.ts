@@ -1,8 +1,26 @@
-import { migrations } from "../database/schema";
+import { migrations, type Migration } from "../database/schema";
 
-export const remoteMigrations = migrations.filter(
-  (migration) => migration.id !== 3,
-);
+export interface RemoteMigration extends Migration {
+  requiresForeignKeysDisabled?: boolean;
+}
+
+export const remoteMigrations: RemoteMigration[] = migrations
+  .filter((migration) => migration.id !== 3)
+  .map((migration) => {
+    if (migration.id === 5) {
+      return { ...migration, requiresForeignKeysDisabled: true };
+    }
+
+    if (migration.id === 6) {
+      return {
+        ...migration,
+        // Remote databases do not own local outbox tables used by these triggers.
+        sql: "",
+      };
+    }
+
+    return migration;
+  });
 
 export type SyncTableName =
   | "users"
@@ -58,11 +76,19 @@ export const syncTables: SyncTableMetadata[] = [
     primaryKey: "id",
     columns: [
       "id",
+      "customer_type",
       "name",
       "name_normalized",
       "cpf",
       "cpf_normalized",
       "rg",
+      "legal_name",
+      "legal_name_normalized",
+      "trade_name",
+      "trade_name_normalized",
+      "cnpj",
+      "cnpj_normalized",
+      "state_registration",
       "street",
       "neighborhood",
       "number",
@@ -167,18 +193,12 @@ export const deleteOrder = [...syncTables].reverse();
 
 export function buildRemoteSchemaScript(): string {
   const migrationScript = remoteMigrations
-    .map(
-      (migration) => `
-        ${migration.sql}
-        INSERT OR IGNORE INTO schema_migrations (id, name, applied_at)
-        VALUES (${migration.id}, ${sqlLiteral(migration.name)}, CURRENT_TIMESTAMP);
-      `,
-    )
+    .map((migration) => buildRemoteMigrationScript(migration))
     .join("\n");
 
   return `
-    BEGIN;
     ${migrationScript}
+    BEGIN;
     CREATE TABLE IF NOT EXISTS a3_sync_metadata (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -191,6 +211,40 @@ export function buildRemoteSchemaScript(): string {
       updated_at = excluded.updated_at;
     COMMIT;
   `;
+}
+
+export function buildRemoteMigrationScript(migration: RemoteMigration): string {
+  const migrationSql = migration.requiresForeignKeysDisabled
+    ? withoutForeignKeyPragmas(migration.sql)
+    : migration.sql;
+  const body = migrationSql.trim();
+
+  return `
+    ${migration.requiresForeignKeysDisabled ? "PRAGMA foreign_keys = OFF;" : ""}
+    BEGIN;
+    ${body ? `${body}\n` : ""}
+    ${buildForeignKeyCheckGuardSql()}
+    INSERT OR IGNORE INTO schema_migrations (id, name, applied_at)
+    VALUES (${migration.id}, ${sqlLiteral(migration.name)}, CURRENT_TIMESTAMP);
+    COMMIT;
+    ${migration.requiresForeignKeysDisabled ? "PRAGMA foreign_keys = ON;" : ""}
+  `;
+}
+
+function buildForeignKeyCheckGuardSql(): string {
+  return `
+    CREATE TEMP TABLE IF NOT EXISTS a3_remote_fk_check_guard (
+      violation_count INTEGER NOT NULL CHECK (violation_count = 0)
+    );
+    DELETE FROM a3_remote_fk_check_guard;
+    INSERT INTO a3_remote_fk_check_guard (violation_count)
+    SELECT COUNT(*) FROM pragma_foreign_key_check;
+    DROP TABLE a3_remote_fk_check_guard;
+  `;
+}
+
+function withoutForeignKeyPragmas(sql: string): string {
+  return sql.replace(/^\s*PRAGMA\s+foreign_keys\s*=\s*(?:ON|OFF)\s*;\s*$/gim, "");
 }
 
 function sqlLiteral(value: string): string {

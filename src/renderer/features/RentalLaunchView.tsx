@@ -1,13 +1,17 @@
 import { CalendarDays, Check, CreditCard, Eraser, MapPin, Minus, PackagePlus, Plus, Search, Trash2, UserRound, UsersRound, WalletCards } from "lucide-react";
 import { useMemo, useState } from "react";
 import { calculateReturnDate } from "../../domain/dateRules";
+import {
+  getCustomerDisplayName,
+  getCustomerPrimaryDocument,
+} from "../../domain/customerDisplay";
 import { paymentLabels, periodLabels } from "../../domain/labels";
 import {
   calculateRentalItemTotals,
   calculateRentalMoneyTotals,
   formatCents
 } from "../../domain/money";
-import { formatCep, formatCpf } from "../../domain/normalization";
+import { formatCep } from "../../domain/normalization";
 import { PAYMENT_METHODS, RENTAL_PERIODS, type CustomerSearchResult, type EquipmentSearchResult, type RentalDetail } from "../../domain/types";
 import type { RentalLaunchInput } from "../../shared/contracts";
 import { AppButton, ConfirmDialog, EmptyState, Field, IconButton, Message, PageHeader, SectionCard, SelectField, UfSelect } from "../components/Form";
@@ -175,11 +179,10 @@ export function RentalLaunchView({ draftUserId }: { draftUserId: string }) {
             onPeriodChange={changePeriod}
           />
           <DeliverySection customer={customer} form={form} onChange={setForm} />
-          <ReceiverSection form={form} onChange={setForm} />
           <PaymentSection form={form} onChange={setForm} />
         </div>
         <RentalReview
-          customerName={customer?.name}
+          customerName={customer ? getCustomerDisplayName(customer) : undefined}
           form={form}
           itemLines={items.length}
           totalQuantity={totalQuantity}
@@ -223,10 +226,15 @@ export function RentalLaunchView({ draftUserId }: { draftUserId: string }) {
 }
 
 function CustomerSection({ customer, onSearch }: { customer: CustomerSearchResult | null; onSearch(): void }) {
+  const document = customer ? getCustomerPrimaryDocument(customer) : null;
+  const documentText = document?.value
+    ? `${document.label} ${document.value}`
+    : "Sem documento";
+
   return (
     <SectionCard
       title="1. Cliente"
-      description="Selecione quem ficará responsável pela locação."
+      description="Selecione o cliente da locação."
       action={<AppButton variant="ghost" icon={<Search size={17} />} type="button" onClick={onSearch}>{customer ? "Trocar cliente" : "Buscar cliente"}</AppButton>}
     >
       {customer ? (
@@ -234,13 +242,13 @@ function CustomerSection({ customer, onSearch }: { customer: CustomerSearchResul
           <span className="selection-icon"><UserRound size={20} /></span>
           <div>
             <span>Cliente selecionado</span>
-            <strong>{customer.name}</strong>
-            <small>{customer.cpf} · {customer.city} · {customer.contact || "Sem contato"}</small>
+            <strong>{getCustomerDisplayName(customer)}</strong>
+            <small>{documentText} · {customer.city || "Sem cidade"} · {customer.contact || "Sem contato"}</small>
           </div>
           <Check size={20} />
         </div>
       ) : (
-        <EmptyState icon={<UsersRound size={25} />} title="Nenhum cliente selecionado" description="A busca só exibe resultados depois que você digitar nome ou CPF." />
+        <EmptyState icon={<UsersRound size={25} />} title="Nenhum cliente selecionado" description="A busca só exibe resultados depois que você digitar nome, CPF ou CNPJ." />
       )}
     </SectionCard>
   );
@@ -341,7 +349,7 @@ function PeriodSection({
 
 function PaymentSection({ form, onChange }: { form: RentalFormState; onChange(form: RentalFormState): void }) {
   return (
-    <SectionCard title="6. Pagamento">
+    <SectionCard title="5. Pagamento">
       <div className="choice-group">
         <span className="field-label">Forma de pagamento</span>
         <div className="choice-grid payments">
@@ -432,30 +440,6 @@ function DeliveryPreview({ customer }: { customer: CustomerSearchResult | null }
         <span>{customer.neighborhood} · {customer.cep} · {customer.city}/{customer.state}</span>
       </div>
     </div>
-  );
-}
-
-function ReceiverSection({ form, onChange }: { form: RentalFormState; onChange(form: RentalFormState): void }) {
-  const receiverStateLabel = form.receiverIsCustomer ? "Sim" : "Não";
-
-  return (
-    <SectionCard title="5. Recebedor">
-      <div className="switch-row">
-        <Switch
-          checked={form.receiverIsCustomer}
-          aria-label="O cliente receberá os equipamentos?"
-          onCheckedChange={(checked) => onChange({ ...form, receiverIsCustomer: checked })}
-        />
-        <div><strong>O cliente receberá os equipamentos?</strong></div>
-        <span className={form.receiverIsCustomer ? "switch-state yes" : "switch-state no"}>{receiverStateLabel}</span>
-      </div>
-      {!form.receiverIsCustomer && (
-        <div className="form-grid two receiver-fields">
-          <Field label="Nome do recebedor" value={form.receiverName} onChange={(event) => onChange({ ...form, receiverName: event.target.value })} />
-          <Field label="CPF do recebedor" value={form.receiverCpf} onChange={(event) => onChange({ ...form, receiverCpf: formatCpf(event.target.value) })} />
-        </div>
-      )}
-    </SectionCard>
   );
 }
 

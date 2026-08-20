@@ -240,10 +240,11 @@ function registerIpcHandlers(): void {
     return created;
   });
   handle(ipcChannels.updateUser, async (id, input) => {
-    requireAdmin("user-management");
+    const user = requireAdmin("user-management");
     const updated = await service.updateUser(
       String(id),
       input as UserUpdateInput,
+      user.id,
     );
     if (currentUser?.id === updated.id) {
       currentUser = updated;

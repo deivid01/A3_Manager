@@ -1,9 +1,12 @@
-import fs from "node:fs";
+﻿import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import initSqlJs, { type Database as SqliteDatabase } from "sql.js";
 import { describe, expect, it } from "vitest";
 import { AppError } from "../src/domain/appError";
+import { normalizeSearch } from "../src/domain/normalization";
 import type { DbParam, DbRow, SqlJsDatabase } from "../src/infrastructure/database/SqlJsDatabase";
+import { migrations } from "../src/infrastructure/database/schema";
 import { A20sDbClient, type A20sDbClientLike } from "../src/infrastructure/sync/A20sDbClient";
 import {
   A20sConfigStore,
@@ -140,9 +143,6 @@ describe("sincronização local/remota", () => {
         deliveryCep: "",
         deliveryCity: "",
         deliveryState: "",
-        receiverIsCustomer: true,
-        receiverName: "",
-        receiverCpf: "",
         paymentMethod: "PIX",
         installments: null,
       },
@@ -220,11 +220,19 @@ describe("sincronização local/remota", () => {
     remote.rows.set("customers", [
       {
         id: "remote-customer",
+        customer_type: "PF",
         name: "Cliente Remoto",
         name_normalized: "cliente remoto",
         cpf: "529.982.247-25",
         cpf_normalized: "52998224725",
         rg: "",
+        legal_name: null,
+        legal_name_normalized: null,
+        trade_name: null,
+        trade_name_normalized: null,
+        cnpj: null,
+        cnpj_normalized: null,
+        state_registration: null,
         street: "Rua",
         neighborhood: "Centro",
         number: "1",
@@ -244,6 +252,91 @@ describe("sincronização local/remota", () => {
     expect(Number(db.queryOne("SELECT COUNT(*) AS total FROM sync_outbox")?.total)).toBe(0);
     expect(db.queryOne("SELECT name FROM customers WHERE id = ?", ["remote-customer"])?.name).toBe(
       "Cliente Remoto",
+    );
+  });
+
+  it("aplica migrations remotas 5 e 6 preservando cliente referenciado com foreign keys ativas", async () => {
+    const { db } = await createTestService();
+    prepareLinkedMirror(db);
+    const remote = await createSqliteRemoteThroughMigration4();
+    seedRemoteRentalFixture(remote);
+    const coordinator = buildCoordinator(db, remote);
+
+    const status = await coordinator.syncNow();
+
+    const customer = (
+      await remote.query<DbRow>("SELECT * FROM customers WHERE id = ?", [
+        "customer-v4",
+      ])
+    ).rows[0];
+    const rental = (
+      await remote.query<DbRow>("SELECT customer_id FROM rentals WHERE id = ?", [
+        "rental-v4",
+      ])
+    ).rows[0];
+    const foreignKeyCheck = await remote.query<DbRow>("PRAGMA foreign_key_check");
+    const foreignKeys = await remote.query<{ foreign_keys: number }>(
+      "PRAGMA foreign_keys",
+    );
+    const applied = await remote.query<{ id: number | string }>(
+      "SELECT id FROM schema_migrations ORDER BY id",
+    );
+    const migration5ScriptIndex = remote.scripts.findIndex((sql) =>
+      sql.includes("CREATE TABLE customers_v5"),
+    );
+    const migration6ScriptIndex = remote.scripts.findIndex((sql) =>
+      sql.includes("recreate_customer_outbox_triggers"),
+    );
+
+    expect(status.state).toBe("online");
+    expect(customer).toMatchObject({
+      id: "customer-v4",
+      customer_type: "PF",
+      name: "Cliente V4",
+      cpf: "529.982.247-25",
+      rg: "MG-12.345.678",
+    });
+    expect(rental?.customer_id).toBe("customer-v4");
+    expect(foreignKeyCheck.rows).toHaveLength(0);
+    expect(Number(foreignKeys.rows[0]?.foreign_keys)).toBe(1);
+    expect(applied.rows.map((row) => Number(row.id))).toEqual([1, 2, 4, 5, 6]);
+    expect(migration5ScriptIndex).toBeGreaterThanOrEqual(0);
+    expect(migration6ScriptIndex).toBeGreaterThan(migration5ScriptIndex);
+    expect(remote.scripts[migration5ScriptIndex]).toMatch(
+      /PRAGMA foreign_keys = OFF;\s*BEGIN;/,
+    );
+    expect(remote.scripts[migration5ScriptIndex]).toMatch(
+      /COMMIT;\s*PRAGMA foreign_keys = ON;/,
+    );
+  });
+
+  it("limpa transacao remota aberta quando migration falha", async () => {
+    const { db } = await createTestService();
+    prepareLinkedMirror(db);
+    const remote = await createSqliteRemoteThroughMigration4();
+    seedRemoteRentalFixture(remote);
+    remote.failCustomerMigrationWithOpenTransaction = true;
+    const coordinator = buildCoordinator(db, remote);
+
+    const firstStatus = await coordinator.syncNow();
+    const firstApplied = await remote.query<{ id: number | string }>(
+      "SELECT id FROM schema_migrations ORDER BY id",
+    );
+    await expect(remote.script("BEGIN; COMMIT;")).resolves.toMatchObject({
+      ok: true,
+    });
+    const secondStatus = await coordinator.syncNow();
+    await expect(remote.script("BEGIN; COMMIT;")).resolves.toMatchObject({
+      ok: true,
+    });
+
+    expect(firstStatus.state).toBe("error");
+    expect(firstStatus.lastErrorMessage).toBe("Falha simulada da migration 5.");
+    expect(firstApplied.rows.map((row) => Number(row.id))).toEqual([1, 2, 4]);
+    expect(secondStatus.state).toBe("error");
+    expect(secondStatus.lastErrorMessage).toBe("Falha simulada da migration 5.");
+    expect(secondStatus.lastErrorMessage).not.toContain(
+      "cannot start a transaction within a transaction",
     );
   });
 
@@ -271,11 +364,19 @@ describe("sincronização local/remota", () => {
     remote.rows.set("customers", [
       {
         id: "remote-customer",
+        customer_type: "PF",
         name: "Cliente Remoto",
         name_normalized: "cliente remoto",
         cpf: "529.982.247-25",
         cpf_normalized: "52998224725",
         rg: "",
+        legal_name: null,
+        legal_name_normalized: null,
+        trade_name: null,
+        trade_name_normalized: null,
+        cnpj: null,
+        cnpj_normalized: null,
+        state_registration: null,
         street: "Rua",
         neighborhood: "Centro",
         number: "1",
@@ -313,7 +414,7 @@ describe("sincronização local/remota", () => {
 
 function buildCoordinator(
   db: SqlJsDatabase,
-  remote: FakeA20sClient,
+  remote: A20sDbClientLike,
   logger?: FakeSyncLogger,
 ): SyncCoordinator {
   return new SyncCoordinator({
@@ -409,6 +510,182 @@ function memoryTokenCodec(): TokenCodec {
     encrypt: (value) => Buffer.from(value, "utf8").toString("base64"),
     decrypt: (value) => Buffer.from(value, "base64").toString("utf8"),
   };
+}
+
+async function createSqliteRemoteThroughMigration4(): Promise<SqliteA20sClient> {
+  const sql = await initSqlJs({
+    locateFile: () =>
+      path.join(process.cwd(), "node_modules", "sql.js", "dist", "sql-wasm.wasm"),
+  });
+  const remote = new SqliteA20sClient(new sql.Database());
+  const now = "2026-08-18T00:00:00.000Z";
+
+  remote.run("PRAGMA foreign_keys = ON;");
+  for (const migration of migrations.filter((item) =>
+    [1, 2, 4].includes(item.id),
+  )) {
+    try {
+      remote.run(migration.sql);
+    } catch (error) {
+      throw new Error(
+        `Falha ao preparar schema remoto v4 na migration ${migration.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    remote.run(
+      "INSERT INTO schema_migrations (id, name, applied_at) VALUES (?, ?, ?)",
+      [migration.id, migration.name, now],
+    );
+  }
+  remote.run(`
+    CREATE TABLE a3_sync_metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    INSERT INTO a3_sync_metadata (key, value, updated_at)
+    VALUES ('schema', 'a3_manager_sync_v1', CURRENT_TIMESTAMP);
+  `);
+
+  return remote;
+}
+
+function seedRemoteRentalFixture(remote: SqliteA20sClient): void {
+  const now = "2026-08-18T00:00:00.000Z";
+
+  remote.run(
+    `INSERT INTO users
+      (id, username, username_normalized, password_hash, role, active,
+       created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+    ["user-v4", "SYSTEM DEV", "system dev", "hash", "ADMIN", now, now],
+  );
+  remote.run(
+    `INSERT INTO customers
+      (id, name, name_normalized, cpf, cpf_normalized, rg, street,
+       neighborhood, number, cep, city, state, contact, archived_at,
+       created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+    [
+      "customer-v4",
+      "Cliente V4",
+      normalizeSearch("Cliente V4"),
+      "529.982.247-25",
+      "52998224725",
+      "MG-12.345.678",
+      "Rua V4",
+      "Centro",
+      "10",
+      "01001-000",
+      "Sao Paulo",
+      "SP",
+      "Contato",
+      now,
+      now,
+    ],
+  );
+  remote.run(
+    `INSERT INTO rentals
+      (id, code, status, customer_id, user_id, period, start_date, return_date,
+       delivery_street, delivery_neighborhood, delivery_number, delivery_cep,
+       delivery_city, delivery_state, receiver_is_customer, receiver_name,
+       receiver_cpf, payment_method, installments, customer_name_snapshot,
+       customer_name_snapshot_normalized, customer_snapshot_json,
+       company_snapshot_json, launched_by_username, finalized_at,
+       created_at, updated_at, client_request_id, archived_at, archived_by_user_id)
+     VALUES (?, ?, 'ONGOING', ?, ?, 'MONTHLY', '2026-08-18', '2026-09-18',
+       '', '', '', '', '', '', 1, '', '', 'PIX', NULL, ?, ?, ?, ?, ?,
+       NULL, ?, ?, NULL, NULL, NULL)`,
+    [
+      "rental-v4",
+      "LOC-20260818-0001",
+      "customer-v4",
+      "user-v4",
+      "Cliente V4",
+      normalizeSearch("Cliente V4"),
+      JSON.stringify({ id: "customer-v4", name: "Cliente V4" }),
+      "{}",
+      "SYSTEM DEV",
+      now,
+      now,
+    ],
+  );
+}
+
+class SqliteA20sClient implements A20sDbClientLike {
+  readonly scripts: string[] = [];
+  failCustomerMigrationWithOpenTransaction = false;
+
+  constructor(private readonly database: SqliteDatabase) {}
+
+  run(sql: string, params: DbParam[] = []): void {
+    if (params.length === 0) {
+      this.database.run(sql);
+      return;
+    }
+    this.database.run(sql, params);
+  }
+
+  async health() {
+    return {
+      ok: true as const,
+      service: "a20s-db-api",
+      uptime: 1,
+      timestamp: "2026-08-17T00:00:00.000Z",
+    };
+  }
+
+  async listDatabases() {
+    return {
+      databases: [
+        {
+          name: "a3_manager",
+          file: "a3_manager.db",
+          bytes: 1,
+          modifiedAt: "2026-08-17T00:00:00.000Z",
+        },
+      ],
+    };
+  }
+
+  async query<T>(sql: string, params: unknown[] = []) {
+    return response(this.queryRows<T>(sql, params));
+  }
+
+  async execute(sql: string, params: unknown[] = []) {
+    this.database.run(sql, params.map(toSqliteParam));
+    return executeResponse();
+  }
+
+  async script(sql: string) {
+    this.scripts.push(sql);
+    if (
+      this.failCustomerMigrationWithOpenTransaction &&
+      sql.includes("CREATE TABLE customers_v5")
+    ) {
+      this.database.run("PRAGMA foreign_keys = OFF; BEGIN;");
+      throw new AppError("A3-SYNC-004", "Falha simulada da migration 5.");
+    }
+
+    this.database.run(sql);
+    return { ok: true as const, durationMs: 1 };
+  }
+
+  private queryRows<T>(sql: string, params: unknown[]): T[] {
+    const statement = this.database.prepare(sql);
+    const rows: T[] = [];
+
+    try {
+      statement.bind(params.map(toSqliteParam));
+      while (statement.step()) {
+        rows.push(statement.getAsObject() as T);
+      }
+      return rows;
+    } finally {
+      statement.free();
+    }
+  }
 }
 
 class FakeA20sClient implements A20sDbClientLike {
@@ -537,4 +814,14 @@ function rowFromParams(table: SyncTableMetadata, params: unknown[]): DbRow {
   return Object.fromEntries(
     table.columns.map((column, index) => [column, params[index] as DbParam]),
   );
+}
+
+function toSqliteParam(value: unknown): DbParam {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value === "number" || typeof value === "string") {
+    return value;
+  }
+  return String(value);
 }

@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { AppError } from "../../domain/appError";
+import { getCustomerDisplayName } from "../../domain/customerDisplay";
 import { calculateReturnDate } from "../../domain/dateRules";
 import { getRentalRateForPeriod } from "../../domain/money";
 import { normalizeSearch } from "../../domain/normalization";
@@ -28,6 +28,7 @@ import {
   mustFind,
   parseInput,
 } from "../serviceHelpers";
+import { createId } from "../ids";
 import type { CompanyApplicationService } from "./CompanyApplicationService";
 
 export class RentalApplicationService {
@@ -51,16 +52,11 @@ export class RentalApplicationService {
       const customer = mapCustomer(
         mustFind(this.db, "customers", data.customerId),
       );
+      const customerDisplayName = getCustomerDisplayName(customer);
       const company = this.company.get();
       const returnDate = calculateReturnDate(data.startDate, data.period);
       const installments =
         data.paymentMethod === "CREDIT_CARD" ? data.installments : null;
-      const receiverName = data.receiverIsCustomer
-        ? ""
-        : (data.receiverName ?? "");
-      const receiverCpf = data.receiverIsCustomer
-        ? ""
-        : (data.receiverCpf ?? "");
       const uniqueEquipmentIds = new Set(
         data.items.map((item) => item.equipmentId),
       );
@@ -71,7 +67,7 @@ export class RentalApplicationService {
         );
       }
 
-      const rentalId = randomUUID();
+      const rentalId = createId();
       const now = new Date().toISOString();
       const code = createRentalCode(this.db, now);
       this.db.execute(
@@ -97,13 +93,13 @@ export class RentalApplicationService {
           data.deliveryCep ?? "",
           data.deliveryCity ?? "",
           data.deliveryState ?? "",
-          data.receiverIsCustomer ? 1 : 0,
-          receiverName,
-          receiverCpf,
+          1,
+          "",
+          "",
           data.paymentMethod,
           installments,
-          customer.name,
-          normalizeSearch(customer.name),
+          customerDisplayName,
+          normalizeSearch(customerDisplayName),
           JSON.stringify(customer),
           JSON.stringify(company),
           user.username,
@@ -139,7 +135,7 @@ export class RentalApplicationService {
              equipment_value_cents, unit_rental_rate_cents, unit_indemnification_value_cents)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            randomUUID(),
+            createId(),
             rentalId,
             equipment.id,
             equipment.name,
@@ -154,7 +150,7 @@ export class RentalApplicationService {
             (id, equipment_id, rental_id, type, quantity, created_at, note)
            VALUES (?, ?, ?, 'RENTAL_OUT', ?, ?, ?)`,
           [
-            randomUUID(),
+            createId(),
             equipment.id,
             rentalId,
             item.quantity,
@@ -223,7 +219,7 @@ export class RentalApplicationService {
             (id, equipment_id, rental_id, type, quantity, created_at, note)
            VALUES (?, ?, ?, 'RENTAL_RETURN', ?, ?, ?)`,
           [
-            randomUUID(),
+            createId(),
             equipment.id,
             rental.id,
             item.quantity,

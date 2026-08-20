@@ -28,6 +28,9 @@ export const PAYMENT_METHODS = [
 ] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
+export const CUSTOMER_TYPES = ["PF", "PJ"] as const;
+export type CustomerType = (typeof CUSTOMER_TYPES)[number];
+
 export const BRAZILIAN_STATES = [
   "AC",
   "AL",
@@ -86,9 +89,14 @@ export interface CompanySettings {
 
 export interface Customer {
   id: string;
+  customerType: CustomerType;
   name: string;
   cpf: string;
   rg: string;
+  legalName: string;
+  tradeName: string;
+  cnpj: string;
+  stateRegistration: string;
   street: string;
   neighborhood: string;
   number: string;
@@ -140,9 +148,6 @@ export interface Rental {
   deliveryCep: string;
   deliveryCity: string;
   deliveryState: string;
-  receiverIsCustomer: boolean;
-  receiverName: string;
-  receiverCpf: string;
   paymentMethod: PaymentMethod;
   installments: number | null;
   clientRequestId: string | null;
@@ -162,8 +167,14 @@ export interface RentalDetail extends Rental {
 
 export interface CustomerSearchResult {
   id: string;
+  customerType: CustomerType;
   name: string;
   cpf: string;
+  rg: string;
+  legalName: string;
+  tradeName: string;
+  cnpj: string;
+  stateRegistration: string;
   street: string;
   neighborhood: string;
   number: string;

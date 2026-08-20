@@ -55,8 +55,12 @@ export class ApplicationService {
   createUser(input: UserInput): Promise<User> {
     return this.auth.createUser(input);
   }
-  updateUser(id: string, input: UserUpdateInput): Promise<User> {
-    return this.auth.updateUser(id, input);
+  updateUser(
+    id: string,
+    input: UserUpdateInput,
+    actorUserId: string,
+  ): Promise<User> {
+    return this.auth.updateUser(id, input, actorUserId);
   }
   getCompany(): CompanySettings {
     return this.company.get();

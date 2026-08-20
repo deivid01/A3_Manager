@@ -1,5 +1,9 @@
 import { Check, FileDown, PackagePlus, Plus, Printer, Search, Send, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import {
+  getCustomerDisplayName,
+  getCustomerPrimaryDocument,
+} from "../../domain/customerDisplay";
 import { paymentLabels, periodLabels } from "../../domain/labels";
 import { formatCents, type RentalMoneyTotals } from "../../domain/money";
 import type { CustomerSearchResult, EquipmentSearchResult, RentalDetail } from "../../domain/types";
@@ -157,19 +161,43 @@ export function CustomerSearchModal({ onClose, onSelect }: { onClose(): void; on
   }, [search, ready]);
 
   return (
-    <Modal className="customer-search-modal" title="Selecionar cliente" description="Busque pelo nome ou CPF. Nenhum dado é exibido antes da pesquisa." onClose={onClose}>
-      <SearchInput value={search} onChange={setSearch} placeholder="Digite nome ou CPF" />
+    <Modal className="customer-search-modal" title="Selecionar cliente" description="Busque pelo nome, CPF ou CNPJ. Nenhum dado é exibido antes da pesquisa." onClose={onClose}>
+      <SearchInput value={search} onChange={setSearch} placeholder="Digite nome, CPF ou CNPJ" />
       {!ready ? <EmptyState icon={<Search size={24} />} title="Comece a buscar" description="Digite ao menos 2 letras ou 3 números." />
         : loading ? <Loading label="Buscando clientes" />
         : completed && results.length === 0 ? <EmptyState title="Nenhum cliente encontrado" description="Revise o termo informado e tente novamente." />
         : <div className="search-results">{results.map((customer) => (
-          <button key={customer.id} type="button" onClick={() => onSelect(customer)}>
-            <span className="result-icon"><UserRound size={18} /></span>
-            <div><strong>{customer.name}</strong><span>{customer.cpf} · {customer.city}</span></div>
-            <Check size={17} />
-          </button>
+          <CustomerSearchResultButton
+            customer={customer}
+            key={customer.id}
+            onSelect={() => onSelect(customer)}
+          />
         ))}</div>}
     </Modal>
+  );
+}
+
+function CustomerSearchResultButton({
+  customer,
+  onSelect,
+}: {
+  customer: CustomerSearchResult;
+  onSelect(): void;
+}) {
+  const document = getCustomerPrimaryDocument(customer);
+  const documentText = document.value
+    ? `${document.label} ${document.value}`
+    : "Sem documento";
+
+  return (
+    <button type="button" onClick={onSelect}>
+      <span className="result-icon"><UserRound size={18} /></span>
+      <div>
+        <strong>{getCustomerDisplayName(customer)}</strong>
+        <span>{documentText} · {customer.city || "Sem cidade"}</span>
+      </div>
+      <Check size={17} />
+    </button>
   );
 }
 

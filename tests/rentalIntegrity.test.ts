@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+﻿import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,7 +11,7 @@ import { validCustomer, validEquipment, createTestService } from "./helpers";
 
 describe("integridade transacional de locações", () => {
   it("mantém lançamento idempotente para a mesma requisição do cliente", async () => {
-    const { service } = await createTestService();
+    const { db, service } = await createTestService();
     const user = await service.login({ username: "SYSTEM DEV", password: "_int@383" });
     const customer = service.createCustomer(validCustomer);
     const equipment = service.createEquipment(validEquipment);
@@ -26,9 +26,6 @@ describe("integridade transacional de locações", () => {
       deliveryCep: "",
       deliveryCity: "",
       deliveryState: "",
-      receiverIsCustomer: true,
-      receiverName: "Não deve persistir",
-      receiverCpf: "529.982.247-25",
       paymentMethod: "PIX" as const,
       installments: 5,
       clientRequestId: randomUUID()
@@ -44,7 +41,14 @@ describe("integridade transacional de locações", () => {
         ?.stockQuantity,
     ).toBe(3);
     expect(second.installments).toBeNull();
-    expect(second.receiverName).toBe("");
+    expect(db.queryOne(
+      "SELECT receiver_is_customer, receiver_name, receiver_cpf FROM rentals WHERE id = ?",
+      [second.id],
+    )).toMatchObject({
+      receiver_is_customer: 1,
+      receiver_name: "",
+      receiver_cpf: "",
+    });
   });
 
   it("não deixa movimentações de estoque quando a transação falha", async () => {
@@ -66,9 +70,6 @@ describe("integridade transacional de locações", () => {
           deliveryCep: "",
           deliveryCity: "",
           deliveryState: "",
-          receiverIsCustomer: true,
-          receiverName: "",
-          receiverCpf: "",
           paymentMethod: "PIX",
           installments: null,
           clientRequestId: randomUUID()
@@ -152,6 +153,6 @@ describe("integridade transacional de locações", () => {
     expect(rental?.code).toBe("LOC-20260814-0001");
     expect(rental?.client_request_id).toBeNull();
     expect(rentalItem?.unit_rental_rate_cents).toBe(123456);
-    expect(applied.map((row) => Number(row.id))).toEqual([1, 2, 3, 4]);
+    expect(applied.map((row) => Number(row.id))).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });

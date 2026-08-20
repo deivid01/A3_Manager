@@ -38,7 +38,13 @@ interface UserForm {
 const emptyForm: UserForm = { username: "", password: "", role: "USER", active: true };
 type UserCreateDraft = Pick<UserForm, "username" | "role">;
 
-export function UsersView({ draftUserId }: { draftUserId: string }) {
+export function UsersView({
+  currentUser,
+  draftUserId,
+}: {
+  currentUser: User;
+  draftUserId: string;
+}) {
   const [rows, setRows] = useState<User[]>([]);
   const [form, setForm] = useState<UserForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -49,6 +55,9 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
   const [error, setError] = useState("");
   const createDraftKey = buildDraftKey(draftUserId, "users:create");
   const userDraft = toUserCreateDraft(form);
+  const editingSystemSelf = Boolean(
+    editingId === currentUser.id && isSystemUsername(currentUser.username),
+  );
 
   useStoredDraft({
     key: createDraftKey,
@@ -219,13 +228,15 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
                       </StatusBadge>
                     </td>
                     <td data-label="Ações" className="row-actions">
-                      <IconButton
-                        type="button"
-                        title="Editar usuário"
-                        onClick={() => startEdit(user)}
-                      >
-                        <Edit3 size={17} />
-                      </IconButton>
+                      {canEditUserRow(currentUser, user) && (
+                        <IconButton
+                          type="button"
+                          title="Editar usuário"
+                          onClick={() => startEdit(user)}
+                        >
+                          <Edit3 size={17} />
+                        </IconButton>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -272,6 +283,7 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
               required
               label="Usuário"
               placeholder="NOME DO USUÁRIO"
+              disabled={editingSystemSelf}
               value={form.username}
               onBlur={() =>
                 setForm((current) => ({
@@ -298,6 +310,7 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
             <SelectField
               label="Perfil"
               value={form.role}
+              disabled={editingSystemSelf}
               onChange={(e) =>
                 setForm({ ...form, role: e.target.value as UserInput["role"] })
               }
@@ -309,6 +322,7 @@ export function UsersView({ draftUserId }: { draftUserId: string }) {
               <SelectField
                 label="Status"
                 value={form.active ? "ACTIVE" : "INACTIVE"}
+                disabled={editingSystemSelf}
                 onChange={(e) =>
                   setForm({ ...form, active: e.target.value === "ACTIVE" })
                 }
@@ -347,6 +361,10 @@ function userToForm(user: User): UserForm {
   };
 }
 
+function canEditUserRow(currentUser: User, target: User): boolean {
+  return !isSystemUsername(target.username) || currentUser.id === target.id;
+}
+
 function toUserCreateDraft(form: UserForm): UserCreateDraft {
   return {
     username: form.username,
@@ -374,4 +392,10 @@ function isUserCreateDraft(value: unknown): value is UserCreateDraft {
     typeof draft.username === "string" &&
     (draft.role === "USER" || draft.role === "ADMIN")
   );
+}
+
+const systemUsername = normalizeUsername("SYSTEM DEV");
+
+function isSystemUsername(username: string): boolean {
+  return normalizeUsername(username) === systemUsername;
 }

@@ -1,4 +1,4 @@
-import fs from "node:fs";
+﻿import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -423,9 +423,6 @@ async function createRentalDetail(): Promise<RentalDetail> {
       deliveryCep: "",
       deliveryCity: "",
       deliveryState: "",
-      receiverIsCustomer: true,
-      receiverName: "",
-      receiverCpf: "",
       paymentMethod: "PIX",
       installments: null,
     },

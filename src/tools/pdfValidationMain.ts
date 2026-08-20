@@ -35,9 +35,14 @@ void app
     });
 
     const customer = service.createCustomer({
+      customerType: "PF",
       name: "Carlos Henrique da Silva",
       cpf: "529.982.247-25",
       rg: "45.123.987-0",
+      legalName: "",
+      tradeName: "",
+      cnpj: "",
+      stateRegistration: "",
       street: "Rua das Obras",
       neighborhood: "Jardim Paulista",
       number: "250",
@@ -72,9 +77,6 @@ void app
         deliveryCep: "04567-000",
         deliveryCity: "São Paulo",
         deliveryState: "SP",
-        receiverIsCustomer: false,
-        receiverName: "Mariana Souza",
-        receiverCpf: "390.533.447-05",
         paymentMethod: "CREDIT_CARD",
         installments: 3,
         clientRequestId: randomUUID()

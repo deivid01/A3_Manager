@@ -1,10 +1,35 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { AppError } from "../src/domain/appError";
 import { calculateRentalMoneyTotals } from "../src/domain/money";
 import { renderRentalDocumentHtml } from "../src/infrastructure/printing/rentalDocument";
+import { rentalLaunchSchema } from "../src/shared/contracts";
 import { createTestService, validCustomer, validEquipment } from "./helpers";
 
 describe("serviços principais do A3 Manager", () => {
+  it("valida nova locacao sem exigir dados de recebedor", () => {
+    const parsed = rentalLaunchSchema.parse({
+      customerId: "customer-1",
+      period: "MONTHLY",
+      startDate: "2026-08-14",
+      items: [{ equipmentId: "equipment-1", quantity: 1 }],
+      deliveryStreet: "",
+      deliveryNeighborhood: "",
+      deliveryNumber: "",
+      deliveryCep: "",
+      deliveryCity: "",
+      deliveryState: "",
+      receiverIsCustomer: false,
+      receiverName: "",
+      receiverCpf: "CPF invalido",
+      paymentMethod: "PIX",
+      installments: null,
+    });
+
+    expect(parsed).not.toHaveProperty("receiverIsCustomer");
+    expect(parsed).not.toHaveProperty("receiverName");
+    expect(parsed).not.toHaveProperty("receiverCpf");
+  });
+
   it("semeia SYSTEM DEV com hash seguro e autentica corretamente", async () => {
     const { db, service } = await createTestService();
     const user = await service.login({ username: "system dev", password: "_int@383" });
@@ -33,7 +58,7 @@ describe("serviços principais do A3 Manager", () => {
   });
 
   it("lança locação transacional, baixa estoque e calcula indenização por item", async () => {
-    const { service } = await createTestService();
+    const { db, service } = await createTestService();
     const user = await service.login({ username: "SYSTEM DEV", password: "_int@383" });
     const customer = service.createCustomer(validCustomer);
     const equipment = service.createEquipment(validEquipment);
@@ -50,9 +75,6 @@ describe("serviços principais do A3 Manager", () => {
         deliveryCep: "",
         deliveryCity: "",
         deliveryState: "",
-        receiverIsCustomer: true,
-        receiverName: "",
-        receiverCpf: "",
         paymentMethod: "PIX",
         installments: null
       },
@@ -66,6 +88,15 @@ describe("serviços principais do A3 Manager", () => {
       service.listEquipment("Betoneira 400L").find((item) => item.id === equipment.id)
         ?.stockQuantity,
     ).toBe(3);
+    expect("receiverName" in rental).toBe(false);
+    expect(db.queryOne(
+      "SELECT receiver_is_customer, receiver_name, receiver_cpf FROM rentals WHERE id = ?",
+      [rental.id],
+    )).toMatchObject({
+      receiver_is_customer: 1,
+      receiver_name: "",
+      receiver_cpf: "",
+    });
   });
 
   it("usa o preço do período como snapshot no item da locação", async () => {
@@ -93,9 +124,6 @@ describe("serviços principais do A3 Manager", () => {
           deliveryCep: "",
           deliveryCity: "",
           deliveryState: "",
-          receiverIsCustomer: true,
-          receiverName: "",
-          receiverCpf: "",
           paymentMethod: "PIX",
           installments: null,
         },
@@ -160,9 +188,6 @@ describe("serviços principais do A3 Manager", () => {
         deliveryCep: "",
         deliveryCity: "",
         deliveryState: "",
-        receiverIsCustomer: true,
-        receiverName: "",
-        receiverCpf: "",
         paymentMethod: "PIX",
         installments: null
       },
@@ -193,9 +218,6 @@ describe("serviços principais do A3 Manager", () => {
           deliveryCep: "",
           deliveryCity: "",
           deliveryState: "",
-          receiverIsCustomer: true,
-          receiverName: "",
-          receiverCpf: "",
           paymentMethod: "PIX",
           installments: null
         },
@@ -226,9 +248,6 @@ describe("serviços principais do A3 Manager", () => {
         deliveryCep: "",
         deliveryCity: "",
         deliveryState: "",
-        receiverIsCustomer: true,
-        receiverName: "",
-        receiverCpf: "",
         paymentMethod: "CREDIT_CARD",
         installments: 3
       },
@@ -265,9 +284,6 @@ describe("serviços principais do A3 Manager", () => {
         deliveryCep: "",
         deliveryCity: "",
         deliveryState: "",
-        receiverIsCustomer: true,
-        receiverName: "",
-        receiverCpf: "",
         paymentMethod: "BOLETO",
         installments: null
       },
@@ -314,9 +330,6 @@ describe("serviços principais do A3 Manager", () => {
         deliveryCep: customer.cep,
         deliveryCity: customer.city,
         deliveryState: customer.state as "SP",
-        receiverIsCustomer: true,
-        receiverName: "",
-        receiverCpf: "",
         paymentMethod: "PIX",
         installments: null
       },
@@ -360,9 +373,6 @@ describe("serviços principais do A3 Manager", () => {
         deliveryCep: "",
         deliveryCity: "",
         deliveryState: "",
-        receiverIsCustomer: true,
-        receiverName: "",
-        receiverCpf: "",
         paymentMethod: "PIX",
         installments: null
       },
@@ -399,9 +409,6 @@ describe("serviços principais do A3 Manager", () => {
           deliveryCep: "",
           deliveryCity: "",
           deliveryState: "",
-          receiverIsCustomer: true,
-          receiverName: "",
-          receiverCpf: "",
           paymentMethod: "CASH",
           installments: null
         },
@@ -420,7 +427,7 @@ describe("serviços principais do A3 Manager", () => {
   });
 
   it("gera HTML de contrato com dados esperados e sem navegação da aplicação", async () => {
-    const { service } = await createTestService();
+    const { db, service } = await createTestService();
     const user = await service.login({ username: "SYSTEM DEV", password: "_int@383" });
     const customer = service.createCustomer(validCustomer);
     const equipment = service.createEquipment(validEquipment);
@@ -436,20 +443,30 @@ describe("serviços principais do A3 Manager", () => {
         deliveryCep: "",
         deliveryCity: "São Paulo",
         deliveryState: "SP",
-        receiverIsCustomer: false,
-        receiverName: "João Recebedor",
-        receiverCpf: "529.982.247-25",
         paymentMethod: "PIX",
         installments: null
       },
       user.id
     );
 
-    const html = renderRentalDocumentHtml(rental);
-    expect(html).toContain(rental.code);
+    db.execute(
+      `UPDATE rentals
+       SET receiver_is_customer = 0, receiver_name = ?, receiver_cpf = ?
+       WHERE id = ?`,
+      ["Joao Recebedor", "529.982.247-25", rental.id],
+    );
+    const legacyRental = service.getRental(rental.id);
+
+    const html = renderRentalDocumentHtml(legacyRental);
+    expect("receiverName" in legacyRental).toBe(false);
+    expect(html).toContain(legacyRental.code);
     expect(html).toContain("Maria Oliveira");
     expect(html).toContain("Betoneira 400L");
-    expect(html).toContain("João Recebedor");
+    expect(html).not.toContain("Joao Recebedor");
+    expect(html).not.toContain("Responsável pelo recebimento");
+    expect(html).not.toContain("Recebedor");
+    expect(html).not.toContain("recebedor");
+    expect(html).not.toContain("Entrega e recebimento");
     expect(html).toContain("Total da locação");
     expect(html).toContain("Valor unitário da locação");
     expect(html).toContain("Subtotal da locação");

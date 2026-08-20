@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { AppError } from "../../domain/appError";
 import { normalizeUsername } from "../../domain/normalization";
 import type { User } from "../../domain/types";
@@ -19,6 +18,7 @@ import {
   mustFind,
   parseInput,
 } from "../serviceHelpers";
+import { createId } from "../ids";
 
 export class AuthApplicationService {
   constructor(private readonly db: SqlJsDatabase) {}
@@ -59,7 +59,7 @@ export class AuthApplicationService {
   async createUser(input: UserInput): Promise<User> {
     const data = parseInput(userInputSchema, input);
     const now = new Date().toISOString();
-    const id = randomUUID();
+    const id = createId();
     const username = normalizeUsername(data.username);
     const passwordHash = await hashPassword(data.password);
 
@@ -79,13 +79,19 @@ export class AuthApplicationService {
     return mapUser(mustFind(this.db, "users", id));
   }
 
-  async updateUser(id: string, input: UserUpdateInput): Promise<User> {
+  async updateUser(
+    id: string,
+    input: UserUpdateInput,
+    actorUserId: string,
+  ): Promise<User> {
     const data = parseInput(userUpdateInputSchema, input);
     const username = normalizeUsername(data.username);
     const passwordHash = data.password ? await hashPassword(data.password) : null;
 
     return this.db.transaction(() => {
       const current = mapUser(mustFind(this.db, "users", id));
+      const actor = mapUser(mustFind(this.db, "users", actorUserId));
+      this.assertSystemUserEditAllowed(current, actor, data);
       this.assertKeepsActiveAdmin(current, data.role, data.active);
 
       try {
@@ -132,6 +138,35 @@ export class AuthApplicationService {
     });
   }
 
+  private assertSystemUserEditAllowed(
+    current: User,
+    actor: User,
+    next: Pick<UserUpdateInput, "username" | "role" | "active">,
+  ): void {
+    if (!isSystemUser(current)) {
+      return;
+    }
+
+    if (actor.id !== current.id) {
+      throw new AppError(
+        "AUTH_FORBIDDEN",
+        "Somente o próprio SYSTEM DEV pode editar esta conta.",
+      );
+    }
+
+    const username = normalizeUsername(next.username);
+    if (
+      username !== systemUsername ||
+      next.role !== current.role ||
+      next.active !== current.active
+    ) {
+      throw new AppError(
+        "AUTH_FORBIDDEN",
+        "A conta SYSTEM DEV permite apenas alterar a própria senha.",
+      );
+    }
+  }
+
   private assertKeepsActiveAdmin(
     current: User,
     nextRole: User["role"],
@@ -154,4 +189,10 @@ export class AuthApplicationService {
       );
     }
   }
+}
+
+const systemUsername = normalizeUsername(systemUser.username);
+
+function isSystemUser(user: Pick<User, "username">): boolean {
+  return normalizeUsername(user.username) === systemUsername;
 }

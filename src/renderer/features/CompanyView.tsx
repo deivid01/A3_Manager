@@ -398,7 +398,7 @@ function A20sSyncSection() {
             hint={
               config?.tokenConfigured
                 ? "Token configurado; deixe em branco para preservar."
-                : "Token necessário para /v1/databases, query e execute."
+                : "Necessário para autenticar a sincronização."
             }
             onChange={(event) =>
               setForm({ ...form, token: event.target.value })

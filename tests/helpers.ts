@@ -14,9 +14,14 @@ export async function createTestService() {
 }
 
 export const validCustomer: CustomerInput = {
+  customerType: "PF",
   name: "Maria Oliveira",
   cpf: "529.982.247-25",
   rg: "12.345.678-9",
+  legalName: "",
+  tradeName: "",
+  cnpj: "",
+  stateRegistration: "",
   street: "Rua Central",
   neighborhood: "Centro",
   number: "100",

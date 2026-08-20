@@ -51,9 +51,6 @@ export function buildInitialRentalForm(
     ...emptyDeliveryAddress(),
     period: "MONTHLY",
     startDate,
-    receiverIsCustomer: true,
-    receiverName: "",
-    receiverCpf: "",
     paymentMethod: "PIX",
     installments: null,
     clientRequestId: requestId,
@@ -110,9 +107,6 @@ export function buildRentalLaunchForm(
     deliveryCep: form.deliveryCep,
     deliveryCity: form.deliveryCity,
     deliveryState: form.deliveryState,
-    receiverIsCustomer: form.receiverIsCustomer,
-    receiverName: form.receiverName,
-    receiverCpf: form.receiverCpf,
     paymentMethod: form.paymentMethod,
     installments: form.installments,
     clientRequestId: form.clientRequestId,
@@ -161,9 +155,6 @@ export function isMeaningfulRentalDraft(
       form.startDate !== today ||
       !form.deliveryMatchesCustomer ||
       hasDeliveryAddressContent(form.manualDeliveryAddress) ||
-      !form.receiverIsCustomer ||
-      form.receiverName.trim() ||
-      form.receiverCpf.trim() ||
       form.paymentMethod !== "PIX" ||
       form.installments,
   );
@@ -216,9 +207,6 @@ function isRentalFormState(value: unknown): value is RentalFormState {
     typeof form.deliveryCep === "string" &&
     typeof form.deliveryCity === "string" &&
     typeof form.deliveryState === "string" &&
-    typeof form.receiverIsCustomer === "boolean" &&
-    typeof form.receiverName === "string" &&
-    typeof form.receiverCpf === "string" &&
     typeof form.paymentMethod === "string" &&
     (typeof form.installments === "number" || form.installments === null) &&
     (typeof form.clientRequestId === "string" || form.clientRequestId === undefined) &&
@@ -245,8 +233,14 @@ function isCustomerSearchResult(value: unknown): value is CustomerSearchResult {
   const customer = value as Partial<Record<keyof CustomerSearchResult, unknown>>;
   return (
     typeof customer.id === "string" &&
+    (customer.customerType === "PF" || customer.customerType === "PJ") &&
     typeof customer.name === "string" &&
     typeof customer.cpf === "string" &&
+    typeof customer.rg === "string" &&
+    typeof customer.legalName === "string" &&
+    typeof customer.tradeName === "string" &&
+    typeof customer.cnpj === "string" &&
+    typeof customer.stateRegistration === "string" &&
     typeof customer.street === "string" &&
     typeof customer.neighborhood === "string" &&
     typeof customer.number === "string" &&

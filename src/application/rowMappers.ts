@@ -41,9 +41,14 @@ export function mapCompany(row: DbRow): CompanySettings {
 export function mapCustomer(row: DbRow): Customer {
   return {
     id: asText(row.id),
+    customerType: asText(row.customer_type) === "PJ" ? "PJ" : "PF",
     name: asText(row.name),
     cpf: asText(row.cpf),
     rg: asText(row.rg),
+    legalName: asText(row.legal_name),
+    tradeName: asText(row.trade_name),
+    cnpj: asText(row.cnpj),
+    stateRegistration: asText(row.state_registration),
     street: asText(row.street),
     neighborhood: asText(row.neighborhood),
     number: asText(row.number),
@@ -89,13 +94,10 @@ export function mapRental(row: DbRow): Rental {
     deliveryCep: asText(row.delivery_cep),
     deliveryCity: asText(row.delivery_city),
     deliveryState: asText(row.delivery_state),
-    receiverIsCustomer: asNumber(row.receiver_is_customer) === 1,
-    receiverName: asText(row.receiver_name),
-    receiverCpf: asText(row.receiver_cpf),
     paymentMethod: asText(row.payment_method) as Rental["paymentMethod"],
     installments: row.installments == null ? null : asNumber(row.installments),
     clientRequestId: nullableText(row.client_request_id),
-    customerSnapshot: JSON.parse(asText(row.customer_snapshot_json)) as Rental["customerSnapshot"],
+    customerSnapshot: mapCustomerSnapshot(row.customer_snapshot_json),
     companySnapshot: JSON.parse(asText(row.company_snapshot_json)) as Rental["companySnapshot"],
     launchedByUsername: asText(row.launched_by_username),
     finalizedAt: nullableText(row.finalized_at),
@@ -145,4 +147,40 @@ function nullableText(value: unknown): string | null {
 
 function asNumber(value: unknown): number {
   return Number(value ?? 0);
+}
+
+function mapCustomerSnapshot(value: unknown): Customer {
+  const snapshot = parseJsonObject(value);
+  return {
+    id: asText(snapshot.id),
+    customerType: asText(snapshot.customerType) === "PJ" ? "PJ" : "PF",
+    name: asText(snapshot.name),
+    cpf: asText(snapshot.cpf),
+    rg: asText(snapshot.rg),
+    legalName: asText(snapshot.legalName),
+    tradeName: asText(snapshot.tradeName),
+    cnpj: asText(snapshot.cnpj),
+    stateRegistration: asText(snapshot.stateRegistration),
+    street: asText(snapshot.street),
+    neighborhood: asText(snapshot.neighborhood),
+    number: asText(snapshot.number),
+    cep: asText(snapshot.cep),
+    city: asText(snapshot.city),
+    state: asText(snapshot.state),
+    contact: asText(snapshot.contact),
+    archivedAt: snapshot.archivedAt == null ? null : asText(snapshot.archivedAt),
+    createdAt: asText(snapshot.createdAt),
+    updatedAt: asText(snapshot.updatedAt)
+  };
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(asText(value)) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
 }

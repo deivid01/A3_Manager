@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+﻿import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createTestService, validCustomer, validEquipment } from "./helpers";
 
@@ -28,9 +28,6 @@ describe("busca e relatórios", () => {
           deliveryCep: "",
           deliveryCity: "",
           deliveryState: "",
-          receiverIsCustomer: true,
-          receiverName: "",
-          receiverCpf: "",
           paymentMethod: "CASH",
           installments: null,
           clientRequestId: randomUUID()
@@ -73,9 +70,6 @@ describe("busca e relatórios", () => {
         deliveryCep: "",
         deliveryCity: "",
         deliveryState: "",
-        receiverIsCustomer: true,
-        receiverName: "",
-        receiverCpf: "",
         paymentMethod: "CASH",
         installments: null,
         clientRequestId: randomUUID(),

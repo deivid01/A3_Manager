@@ -124,7 +124,6 @@
 .address-preview span { color: var(--text-muted); font-size: 11px; }
 .address-preview.empty { color: var(--text-muted); }
 .delivery-fields { margin-top: 14px; }
-.receiver-fields { margin-top: 14px; }
 .rental-review { align-self: start; background: var(--surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); color: var(--text-primary); display: grid; gap: 17px; max-width: 100%; padding: 18px; position: sticky; top: 16px; }
 .review-header { display: grid; gap: 2px; }
 .review-header span { color: var(--brand-accent); font-size: 9px; font-weight: 760; text-transform: uppercase; }

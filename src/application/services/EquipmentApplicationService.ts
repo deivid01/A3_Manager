@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { normalizeSearch } from "../../domain/normalization";
 import type { Equipment, EquipmentSearchResult } from "../../domain/types";
 import type {
@@ -11,6 +10,7 @@ import {
 } from "../../shared/contracts";
 import { mapEquipment } from "../rowMappers";
 import { mustFind, parseInput } from "../serviceHelpers";
+import { createId } from "../ids";
 
 export class EquipmentApplicationService {
   constructor(private readonly db: SqlJsDatabase) {}
@@ -62,7 +62,7 @@ export class EquipmentApplicationService {
   create(input: EquipmentInput): Equipment {
     const data = parseInput(equipmentInputSchema, input);
     const now = new Date().toISOString();
-    const id = randomUUID();
+    const id = createId();
     this.db.execute(
       `INSERT INTO equipment
         (id, name, name_normalized, equipment_value_cents, daily_rate_cents,
